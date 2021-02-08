@@ -16,7 +16,7 @@ import time
 
 N = 20000 #Número de partículas
 
-M = 3245*2.325*1e7 #masa total de las particulas q van a interactuar: fraccion no significativa de la total galactica.
+M = 3245*2.325*1e7 #masa total ordinaria
 
 m = M / N #masa de las particulas en Msolares
 
