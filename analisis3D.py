@@ -17,7 +17,7 @@ Parámetros físicos
 
 """""""""""""""
 
-N = 1000 #Número de partículas
+N = 30000 #Número de partículas
 
 T_sol = 225 #periodo del Sol alrededor de la galaxia
 
@@ -278,6 +278,7 @@ for k in range(n_graf):
     plt.savefig('Curva de velocidad radial paso {}.png'.format(k))
     plt.show()
     """
+
 
 
 
