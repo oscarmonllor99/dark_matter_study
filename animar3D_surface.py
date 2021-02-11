@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import matplotlib.animation as animation
-
+from matplotlib import *
 
 ###########################################
 ##########################################
@@ -18,7 +18,7 @@ import matplotlib.animation as animation
 ###########################################
 ##########################################
 
-save = True
+save = False
 ###########################################
 ##########################################
 
@@ -29,7 +29,7 @@ Parámetros físicos
 """""""""""""""
 M = 3245*2.325*1e7#masa total de las particulas q van a interactuar
 
-N = 30000 #Número de partículas
+N = 20000 #Número de partículas
 
 m = M / N #masa de las particulas en Msolares
 
@@ -47,12 +47,14 @@ x_lim, y_lim, z_lim = lim, lim, lim
 
 n = 400
 dt = (T_sol / 2000) 
-N_p = 200
+N_p = 100
 n_p = N_p 
 m_p = N_p 
+l_p = 100
 
 hx = x_lim / n_p #distancia entre puntos de red eje X
 hy = y_lim / m_p #distancia entre puntos de red eje Y
+hz = z_lim / l_p #distancia entre puntos de red eje Y
 
 tray = np.loadtxt('trayectorias.dat', dtype = float)
 tray_3D = tray.reshape(n, N, 3)
@@ -68,7 +70,7 @@ ax = plt.axes(xlim = (0, x_lim), ylim = (0, y_lim))
 #tray[paso de tiempo, particula, eje]
 @jit(nopython=True, fastmath = True)
 def densidad(r_list_0):
-    rho = np.zeros((n_p + 1, m_p + 1))
+    rho = np.ones((n_p + 1, m_p + 1))
     for i in range(N):
         x_pos = int(r_list_0[i,0] / hx)
         y_pos = int(r_list_0[i,1] / hy)
@@ -79,12 +81,29 @@ def densidad(r_list_0):
         
         else:
         
-            rho[x_pos, y_pos] += m / (hx*hy)
+            rho[y_pos, x_pos] += m / (hx*hy)
 
     return rho
 
+@jit(nopython=True, fastmath = True)
+def densidad_z(r_list_0):
+    rho = np.ones((m_p + 1, l_p + 1))
+    for i in range(N):
+        y_pos = int(r_list_0[i,1] / hy)
+        z_pos = int(r_list_0[i,2] / hz)
+        
+        if y_pos <= 0 or y_pos >= m_p or z_pos <= 0 or z_pos >= l_p:
+            
+            pass
+        
+        else:
+            rho[z_pos, y_pos] += m / (hy*hz)
+    return rho
+
+
 x = np.arange(0, x_lim + hx, hx)
 y = np.arange(0, y_lim + hy, hy)
+z = np.arange(0, z_lim + hz, hz)
 
 X, Y = np.meshgrid(x,y)
 
@@ -94,20 +113,26 @@ def iterator_rho(rho):
         rho[k, :, :] = densidad(tray_3D[k, :, :])
     return rho
 
-rho = iterator_rho(np.empty((n, n_p+1, m_p+1)))
-    
+@jit(nopython=True, fastmath = True)
+def iterator_rho_z(rho_z):
+    for k in range(n):
+        rho_z[k, :, :] = densidad_z(tray_3D[k, :, :])
+    return rho_z
 
-    
-contour = ax.contourf(X,Y, rho[0,:,:], cmap = 'nipy_spectral', levels = 300)
-txt = fig.suptitle('')
-colorbar = fig.colorbar(contour)
+rho = iterator_rho(np.empty((n, n_p+1, m_p+1)))
+rho_z = iterator_rho_z(np.empty((n, m_p+1, l_p+1)))
+
+
+contour = ax.imshow(rho_z[0,:,:], cmap = 'nipy_spectral', norm=colors.LogNorm(), interpolation = 'gaussian')
+txt = fig.suptitle('{:f} millones de años'.format(0*25*dt))
+colorbar = fig.colorbar(contour, extend="max")
 colorbar.ax.set_xlabel('$M_0$')
 
 def animation_frame(k):
         
     txt.set_text('{:f} millones de años'.format(k*25*dt))
     
-    ax.contourf(X,Y, rho[k,:,:], cmap = 'nipy_spectral', levels = 60)
+    ax.imshow(rho_z[k,:,:], cmap = 'nipy_spectral', norm=colors.LogNorm(), interpolation = 'gaussian')
     
     return txt
             
