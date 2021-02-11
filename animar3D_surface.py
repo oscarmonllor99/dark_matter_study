@@ -18,7 +18,7 @@ from matplotlib import *
 ###########################################
 ##########################################
 
-save = False
+save = True
 ###########################################
 ##########################################
 
@@ -63,8 +63,10 @@ tray_3D = tray.reshape(n, N, 3)
 
 
 #creamos la figura
-fig = plt.figure()
-ax = plt.axes(xlim = (0, x_lim), ylim = (0, y_lim))
+fig, (ax1, ax2) = plt.subplots(1, 2)
+fig.tight_layout()
+ax1.set_xlabel('Above')
+ax2.set_xlabel('Side')
 
 #posiciones iniciales de las partículas
 #tray[paso de tiempo, particula, eje]
@@ -106,6 +108,7 @@ y = np.arange(0, y_lim + hy, hy)
 z = np.arange(0, z_lim + hz, hz)
 
 X, Y = np.meshgrid(x,y)
+Y_z, Z_z = np.meshgrid(y, z)
 
 @jit(nopython=True, fastmath = True)
 def iterator_rho(rho):
@@ -123,16 +126,18 @@ rho = iterator_rho(np.empty((n, n_p+1, m_p+1)))
 rho_z = iterator_rho_z(np.empty((n, m_p+1, l_p+1)))
 
 
-contour = ax.imshow(rho_z[0,:,:], cmap = 'nipy_spectral', norm=colors.LogNorm(), interpolation = 'gaussian')
+contour = ax1.imshow(rho[0,:,:], cmap = 'nipy_spectral', norm=colors.LogNorm(), interpolation = 'gaussian')
+ax2.imshow(rho_z[0,:,:], cmap = 'nipy_spectral', norm=colors.LogNorm(), interpolation = 'gaussian')
 txt = fig.suptitle('{:f} millones de años'.format(0*25*dt))
-colorbar = fig.colorbar(contour, extend="max")
+colorbar = fig.colorbar(contour)
 colorbar.ax.set_xlabel('$M_0$')
 
 def animation_frame(k):
         
     txt.set_text('{:f} millones de años'.format(k*25*dt))
     
-    ax.imshow(rho_z[k,:,:], cmap = 'nipy_spectral', norm=colors.LogNorm(), interpolation = 'gaussian')
+    ax1.imshow(rho[k,:,:], cmap = 'nipy_spectral', norm=colors.LogNorm(), interpolation = 'gaussian')
+    ax2.imshow(rho_z[k,:,:], cmap = 'nipy_spectral', norm=colors.LogNorm(), interpolation = 'gaussian')
     
     return txt
             
