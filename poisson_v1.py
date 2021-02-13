@@ -6,7 +6,9 @@ import time
 ######### PARÁMETROS FÍSICOS  ################
 ##############################################
 
-N = 20000 #Número de partículas
+N = 200000 #Número de partículas
+
+N_b = int(0.14*N) #el 30% de la materia ordinaria es del bulbo
 
 M = 3245*2.325*1e7#masa total de las particulas q van a interactuar: fraccion no significativa de la total galactica.
 
@@ -29,7 +31,7 @@ x_lim = lim
 y_lim = lim
 z_lim = lim
 
-n = 10000  #número de pasos totales de tiempo
+n = 40000  #número de pasos totales de tiempo
 div_r = 100
 div_v = 100
 n_r = int(n / div_r) #numero de pasos de tiempo guardados para r
@@ -42,7 +44,7 @@ N_p = 100 #número de pasos común a los dos ejes, es decir, número de celdas p
 #el gradiente de la gravedad
 n_p = N_p #número de celdas en el eje X
 m_p = N_p #número de celdas en el eje Y
-l_p = 50 #número de celdas en el eje Z
+l_p = 100 #número de celdas en el eje Z
 
 hx = x_lim / n_p #distancia entre puntos de red eje X
 hy = y_lim / m_p #distancia entre puntos de red eje Y
@@ -103,7 +105,8 @@ def pot_dark(r_vec):
         return (-G*Mh/r)*np.log(1 + r/ah)
     else:
         return 0
-
+    
+@jit(nopython=True, fastmath = True, parallel = False)
 def CM(r_list):
     M = N*m
 
@@ -120,6 +123,7 @@ def CM(r_list):
     Z_CM = np.sum(Zm) / M
     return np.array([X_CM, Y_CM, Z_CM])
 
+@jit(nopython=True, fastmath = True)
 def fuerza(r_list, g, i):
 
     r_list_i = r_list[i, :]
@@ -131,7 +135,7 @@ def fuerza(r_list, g, i):
 
     if x_pos <= 0 or x_pos >= N_p or y_pos <= 0 or y_pos >= N_p or z_pos <= 0 or z_pos >= l_p:
 
-        return np.array([0,0,0])
+        return np.array([0.,0.,0.])
 
     else:
 
@@ -139,9 +143,10 @@ def fuerza(r_list, g, i):
             return g[:, x_pos, y_pos, z_pos] + f_dark(r_list_i)
         else:
             return g[:, x_pos, y_pos, z_pos]
-
+        
+@jit(nopython=True, fastmath = True, parallel = False)
 def densidad(r_list_0):
-    rho = np.zeros((n_p, m_p, l_p), dtype = float)
+    rho = np.zeros((n_p, m_p, l_p))
     for i in range(len(r_list_0)):
         
         x_pos = int(r_list_0[i,0] / hx)
@@ -170,7 +175,6 @@ def poisson(rho, phi):
                                                                          + phi[i, j+1, k] + phi[i, j-1, k])
                                                                          + (1/hz**2)*(phi[i, j, k+1] + phi[i, j, k-1])
                                                                          - 4*np.pi*G*rho[i, j, k]) - w*phi[i, j, k]
-
     return phi
 
 def gradiente(phi):
@@ -179,36 +183,57 @@ def gradiente(phi):
     y = np.arange(0, y_lim, hy)
     z = np.arange(0, z_lim, hz)
     
-    #GRAVEDAD DEBIDA AL POTENCIAL
-    g = np.gradient(phi, x, y, z)
-    g = - np.array(g)  #el menos viene de que g = - grad (phi)
+    g = np.array(np.gradient(phi, x, y, z))
     #El array es del tipo g[componente][NpuntosX][NpuntosY][NpuntosZ]
-    
-    return g
+    return -g
 ###########################################################################
 ###########################################################################
 
 def cond_inicial():
 
     r_list_0 = np.zeros((N, 3))
-
+    r_esf_tot = np.zeros((N, 3))
+    
     for i in range(N):
-
-        R = 0.3 + 10*random.expovariate(1)
-        while R > 40:
-            R = 0.3 + 10*random.expovariate(1)
+             
+            if i < N_b:
+                
+                R = random.uniform(0.1, 3)
+                while R>49:
+                     R = random.uniform(0.1, 3)
+                    
+                
+                theta = random.uniform(0, np.pi)
+                phi = random.uniform(0, 2*np.pi)
+                
+                r_esf = [R, phi, theta]
+                r_esf_tot[i] = r_esf 
+                
+                r_i = [x_lim/2 + R*np.cos(phi)*np.sin(theta), y_lim/2 + 
+                                  R*np.sin(phi)*np.sin(theta), z_lim/2 
+                                  + R*np.cos(theta)]
+                
+                r_list_0[i] = r_i
+                
+                
+            else:
+        
+                R = 10*random.expovariate(1)
+                while R>49:
+                     R = 10*random.expovariate(1)
+                phi = random.uniform(0, 2*np.pi) 
+                z = random.uniform(-0.5, 0.5)
+                
+                r_esf = [R, phi, z]
+                r_esf_tot[i] = r_esf 
+                
+                r_i = [x_lim/2 + R*np.cos(phi), y_lim/2 + R*np.sin(phi), z_lim/2 + z]
+                
+                r_list_0[i] = r_i
             
-        
-        theta = 2*np.pi*random.random()
-        z = 0.5 - random.random()
-        
-        r_list_0[i, 0] = x_lim/2 + R * np.cos(theta)
-        r_list_0[i, 1] = y_lim/2 + R * np.sin(theta)
-        r_list_0[i, 2] = z_lim/2 + z
-
     rho = densidad(r_list_0)
     
-    phi0 =np.zeros((n_p, m_p, l_p), dtype = float) 
+    phi0 = np.zeros((n_p, m_p, l_p), dtype = float) 
     #PLANOS DE CONDICIONES DE FRONTERA
     phi0[:, :, 0] = -G*M/(r[:, :, 0])
     phi0[:, :, l_p-1] = -G*M/(r[:, :, l_p-1])
@@ -235,14 +260,6 @@ def cond_inicial():
             phii = phi[x_pos, y_pos, z_pos]
             
         v_esc = np.sqrt(-2 * phii)
-        
-        if 8 <= np.linalg.norm(r_list_0[i]) <= 10:
-            v_R = random.uniform(-0.4*v_esc, 0.4*v_esc)
-        else:
-            v_R = random.uniform(-0.1*v_esc, 0.1*v_esc)
-            
-        v_z = random.uniform(-0.05*v_esc, 0.05*v_esc) 
-
 
         #producto de g con ur (vector unitario radial)
         if dark:
@@ -260,33 +277,31 @@ def cond_inicial():
         R_norm = np.sqrt(np.dot(R_centro, R_centro))
         ur = R_centro / R_norm
         prod = abs(np.dot(g_vec, ur))
+        
+        v_circ = np.sqrt(R_norm * prod)
+            
+        phi_g = r_esf_tot[i, 1]
 
-        v_tan = np.sqrt(R_norm * prod)
-
-        theta_g = np.arctan((r_list_0[i][1] - y_lim/2) / (r_list_0[i][0] - x_lim/2))
-
-        ###################################
-        #arregle a la función arctan, para que se ajuste a nuestras necesidades
-        ###################################
-        if (r_list_0[i][1] - y_lim/2) < 0:
+        if N < N_b:
                 
-                if (r_list_0[i][0] - x_lim/2) < 0:
-                    
-                    theta_g = np.pi + theta_g
-                    
-                elif (r_list_0[i][0] - x_lim/2) < 0: 
-                    
-                    theta_g = np.pi + theta_g
+                theta_g = r_esf_tot[i, 2]    
+                v_r = random.uniform(-0.1*v_esc, 0.1*v_esc)   
+                v_z = v_circ*np.cos(theta_g)
+                v_tan = v_circ*np.sin(theta_g)
                 
-        elif (r_list_0[i][1] - y_lim/2) > 0:
+                v_list_0[i, 0] = k_vel * (-v_tan * np.sin(phi_g) + v_r * np.cos(phi_g))
+                v_list_0[i, 1] = k_vel * (v_tan * np.cos(phi_g) + v_r * np.sin(phi_g))
+                v_list_0[i, 2] = k_vel * v_z
                 
-                if (r_list_0[i][0]  - x_lim/2) < 0:
-                    
-                    theta_g = np.pi + theta_g
-
-        v_list_0[i, 0] = k_vel * (-v_tan * np.sin(theta_g) + v_R * np.cos(theta_g))
-        v_list_0[i, 1] = k_vel * (v_tan * np.cos(theta_g) + v_R * np.sin(theta_g))
-        v_list_0[i, 2] = k_vel * v_z
+        else:
+                
+                v_tan = v_circ
+                v_R = random.uniform(-0.1*v_esc, 0.1*v_esc)   
+                v_z = random.uniform(-0.05*v_esc, 0.05*v_esc)
+                
+                v_list_0[i, 0] = k_vel * (-v_tan * np.sin(phi_g) + v_R * np.cos(phi_g))
+                v_list_0[i, 1] = k_vel * (v_tan * np.cos(phi_g) + v_R * np.sin(phi_g))
+                v_list_0[i, 2] = k_vel * v_z
 
 
     f_list_0 = np.zeros((N, 3))
@@ -304,6 +319,15 @@ def cond_inicial():
 #################################################################
 #Se aplica el algoritmo de Leapfrog para resolver los primeros pasos de tiempo
 #################################################################
+@jit(nopython=True, fastmath = True)
+def force_update(r_list_new, g):
+    f_list_new = np.zeros((N, 3))
+    for i in range(N):
+        force = fuerza(r_list_new, g, i)
+        f_list_new[i, 0] = force[0]
+        f_list_new[i, 1] = force[1]
+        f_list_new[i, 2] = force[2]
+    return f_list_new 
 
 def paso(r_list, v_list, f_list):
 
@@ -311,7 +335,7 @@ def paso(r_list, v_list, f_list):
  
     rho = densidad(r_list_new)
     
-    phi0 =np.zeros((n_p, m_p, l_p), dtype = float) 
+    phi0 = np.zeros((n_p, m_p, l_p)) 
     #PLANOS DE CONDICIONES DE FRONTERA
     phi0[:, :, 0] = -G*M/(r[:, :, 0])
     phi0[:, :, l_p-1] = -G*M/(r[:, :, l_p-1])
@@ -323,14 +347,8 @@ def paso(r_list, v_list, f_list):
     phi = poisson(rho, phi0)
 
     g = gradiente(phi)
-
-    f_list_new = np.zeros((N, 3))
-
-    for i in range(N):
-        force = fuerza(r_list_new, g, i)
-        f_list_new[i, 0] = force[0]
-        f_list_new[i, 1] = force[1]
-        f_list_new[i, 2] = force[2]
+    
+    f_list_new = force_update(r_list_new, g)
 
     v_list_new = v_list + 0.5*dt*(f_list_new + f_list)
 
@@ -349,13 +367,11 @@ def paso(r_list, v_list, f_list):
 #####################################################################################################
 #####################################################################################################
 
-def tiempo():
-
-    tray = np.empty((n_r, N, 3), dtype = float)
-    tray_CM = np.empty((n_r, 3), dtype = float)
-    vels = np.empty((n_v, N, 3), dtype = float)
-
-    r_list, v_list, f_list = cond_inicial()
+def tiempo(r_list, v_list, f_list):
+    #Lista de trayectorias de todas las partículas
+    tray = np.empty((n_r, N, 3))
+    tray_CM = np.empty((n_r, 3))
+    vels = np.empty((n_v, N, 3))
 
     for k in range(n):
         #Estos son los indices de paso de tiempo para guardar r y v
@@ -363,15 +379,15 @@ def tiempo():
         k_v = int(k // div_v)
 
         R_CM = CM(r_list)
-
+        
         if k == 1:
             t0 = time.time()
-            r_list, v_list, f_list= paso(r_list, v_list, f_list)
+            r_list, v_list, f_list = paso(r_list, v_list, f_list)
             tf = time.time()
             print("El programa va a tardar:", int(n*(tf-t0)/60),"minutos")
         else:
             r_list, v_list, f_list= paso(r_list, v_list, f_list)
-
+            
         if k%div_r == 0.0:
  
             tray[k_r, :, :] = r_list[:, :]
@@ -380,21 +396,22 @@ def tiempo():
 
         if k%div_v == 0.0:
             print((k/n)*100, "%")
-
             vels[k_v, :, :] = v_list[:, :]
 
     return tray, tray_CM, vels
-
+      
+####################################################################################
+####################################################################################
+####################################################################################
 
 ###########################################################################
 # Guaradamos todas las trayectorias obtenidas con el tiempo en tray
 ###########################################################################
 
-###########################################################################
-# Guaradamos todas las trayectorias obtenidas con el tiempo en tray
-###########################################################################
+r_list_0, v_list_0, f_list_0 = cond_inicial()
+
 t0 = time.time()
-trayectorias, trayectoria_CM, velocidades = tiempo()    
+trayectorias, trayectoria_CM, velocidades = tiempo(r_list_0, v_list_0, f_list_0)    
 tf = time.time()
 
 print('El programa ha tardado: ', (tf-t0)/60, 'minutos en completar las trayectorias.')

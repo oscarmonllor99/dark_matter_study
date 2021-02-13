@@ -29,7 +29,7 @@ Parámetros físicos
 
 """""""""""""""
 
-N = 30000 #Número de partículas
+N = 20000 #Número de partículas
 
 T_sol = 225 #periodo del Sol alrededor de la galaxia
 
@@ -43,10 +43,13 @@ lim = 100 #en kpc
 
 x_lim, y_lim, z_lim = lim, lim, lim
 
-n = 400
+ntot = 10000 #número de pasos totales de tiempo
+div_r = 25
+n = int(ntot / div_r) #numero de pasos de tiempo guardados para r
+
 dt = (T_sol / 2000) #intervalo de tiempo entre cada paso
 
-r = 0.002 #en kpc
+r = 0.02 #en kpc
 
 tray = np.loadtxt('trayectorias.dat', dtype = float)
 tray_3D = tray.reshape(n, N, 3)
@@ -89,7 +92,7 @@ txt = fig.suptitle('')
        
 def animation_frame(k):
         
-        txt.set_text('{:f} millones de años'.format(k*25*dt))
+        txt.set_text('{:f} millones de años'.format(k*div_r*dt))
         
         #se crean x_data e y_data donde se almacenan las posiciones para cada paso k de tiempo
         

@@ -17,7 +17,7 @@ Parámetros físicos
 
 """""""""""""""
 
-N = 30000 #Número de partículas
+N = 20000 #Número de partículas
 
 T_sol = 225 #periodo del Sol alrededor de la galaxia
 
@@ -35,8 +35,6 @@ div_v = 100
 n_r = int(n / div_r) #numero de pasos de tiempo guardados para r
 n_v = int(n / div_v) #numero de pasos de tiempo guardados para v
 n_graf = 5
-
-salt = 1 #salto en los pasos, en vez de ir de 1 paso en 1 paso, se va de salt en salt para agilizar y ahorrar espacio
 
 lim = 100 #en kpc
 
@@ -202,7 +200,7 @@ for k in range(n_graf):
     r_data = []
     sigma_data = []
     for u in range(len(V_ANG_med)):
-        if V_ANG_med[u] < 20: #km/s
+        if V_ANG_med[u] < 0.01: #km/s
             pass
         else:
             v_tan_data.append(V_ANG_med[u])

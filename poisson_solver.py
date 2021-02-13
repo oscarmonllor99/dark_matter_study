@@ -9,6 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import random 
 import time
+from matplotlib import colors
 ##############################################
 ######### PARÁMETROS FÍSICO  ################
 ##############################################
@@ -34,7 +35,7 @@ N_p = 100 #número de pasos común a los dos ejes, es decir, número de celdas p
 
 n_p = N_p #número de celdas en el eje X
 m_p = N_p #número de celdas en el eje Y
-l_p = 50 #número de celdas en el eje Z
+l_p = 100 #número de celdas en el eje Z
 
 hx = x_lim / n_p #distancia entre puntos de red eje X
 hy = y_lim / m_p #distancia entre puntos de red eje Y
@@ -133,7 +134,7 @@ rho = densidad(r_list_0, m_list_0, rho0)
 
 
 plt.figure()
-plt.imshow(rho[:,:, int(l_p/2)])
+plt.imshow(rho[:,:, int(l_p/2)] + 1, norm=colors.LogNorm())
 plt.show()
 
 

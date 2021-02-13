@@ -39,13 +39,16 @@ T_sol = 225 #periodo del Sol alrededor de la galaxia
 Parámetros de simulación
 
 """""""""""""""
-salt = 4 
+salt = 10
 
 lim = 100 
 
 x_lim, y_lim, z_lim = lim, lim, lim
 
-n = 400
+ntot = 10000 #número de pasos totales de tiempo
+div_r = 25
+n = int(ntot / div_r) #numero de pasos de tiempo guardados para r
+
 dt = (T_sol / 2000) 
 N_p = 100
 n_p = N_p 
@@ -67,6 +70,7 @@ fig, (ax1, ax2) = plt.subplots(1, 2)
 fig.tight_layout()
 ax1.set_xlabel('Above')
 ax2.set_xlabel('Side')
+
 
 #posiciones iniciales de las partículas
 #tray[paso de tiempo, particula, eje]
@@ -128,13 +132,13 @@ rho_z = iterator_rho_z(np.empty((n, m_p+1, l_p+1)))
 
 contour = ax1.imshow(rho[0,:,:], cmap = 'nipy_spectral', norm=colors.LogNorm(), interpolation = 'gaussian')
 ax2.imshow(rho_z[0,:,:], cmap = 'nipy_spectral', norm=colors.LogNorm(), interpolation = 'gaussian')
-txt = fig.suptitle('{:f} millones de años'.format(0*25*dt))
-colorbar = fig.colorbar(contour)
+txt = fig.suptitle('{:d} millones de años'.format(int(0*div_r*dt)))
+colorbar = fig.colorbar(contour, fraction = 0.15)
 colorbar.ax.set_xlabel('$M_0$')
 
 def animation_frame(k):
         
-    txt.set_text('{:f} millones de años'.format(k*25*dt))
+    txt.set_text('{:d} millones de años'.format(int(k*div_r*dt)))
     
     ax1.imshow(rho[k,:,:], cmap = 'nipy_spectral', norm=colors.LogNorm(), interpolation = 'gaussian')
     ax2.imshow(rho_z[k,:,:], cmap = 'nipy_spectral', norm=colors.LogNorm(), interpolation = 'gaussian')
@@ -149,6 +153,6 @@ movimiento = FuncAnimation(fig, func=animation_frame, frames=np.arange(1, n, sal
 if save:
         # Set up formatting for the movie files
         Writer = animation.writers['ffmpeg']
-        writer = Writer(fps=30, metadata=dict(artist='Me'), bitrate=1800)
+        writer = Writer(fps=5, metadata=dict(artist='Me'), bitrate=1800)
         movimiento.save('movimiento_surface.mp4', writer=writer)
 

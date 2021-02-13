@@ -4,18 +4,19 @@ Created on Tue Jun 30 15:05:09 2020
 
 @author: Oscar
 """
-from numba import jit, njit, prange
+from numba import jit
 import numba
 import numpy as np
 import random 
 import time
 
-
 ##############################################
 ######### PARÁMETROS FÍSICOS  ################
 ##############################################
 
-N = 1000 #Número de partículas
+N = 20000 #Número de partículas
+
+N_b = int(0.14*N) #el 30% de la materia ordinaria es del bulbo
 
 M = 3245*2.325*1e7 #masa total de las particulas q van a interactuar: fraccion no significativa de la total galactica.
 
@@ -36,7 +37,7 @@ lim = 100 #en kpc
 
 x_lim, y_lim, z_lim = lim, lim, lim 
 
-n = 10000 #número de pasos totales de tiempo 
+n = 40000 #número de pasos totales de tiempo 
 div_r = 100
 div_v = 100
 n_r = int(n // div_r) #numero de pasos de tiempo guardados para r
@@ -62,7 +63,7 @@ k_vel=0.95#parámetro de control de momento angular inicial (0--> velocidad angu
 ##############################################
 ### FUNCIONES A UTILIZAR ###
 ##############################################
-
+@jit(nopython=True, fastmath = True, parallel = False)
 def interpolation(y):
     return 0.5*( 1 + (1+4*y**(-1))**(1/2) )
 
@@ -130,8 +131,6 @@ def ener_pot(i, r_list, sumatorio_E):
 # CONDICIONES INICIALES DE LAS PARTÍCULAS ###
 #################################################################
 
-
-
 def cond_inicial():
     
     #Posición inicial de las partículas
@@ -139,23 +138,42 @@ def cond_inicial():
     #distribución aleatoria de las partículas, con ciertas restricciones
     
     r_list_0 = np.zeros((N, 3))
+    r_esf_tot = np.zeros((N, 3))
     
     for i in range(N):
-              
-            R = 10*random.expovariate(1)
-            theta = random.uniform(0, 2*np.pi) 
-
-            z = random.uniform(-0.5, 0.5)
-            
-            r_i = [x_lim/2 + R*np.cos(theta), y_lim/2 + R*np.sin(theta), z_lim/2+ z]
-            
-            r_list_0[i] = r_i
+             
+            if i < N_b:
+                
+                R = random.uniform(0.1, 3)
+                theta = random.uniform(0, np.pi)
+                phi = random.uniform(0, 2*np.pi)
+                
+                r_esf = [R, phi, theta]
+                r_esf_tot[i] = r_esf 
+                
+                r_list_0[i, 0] = x_lim/2 + R*np.cos(phi)*np.sin(theta)
+                r_list_0[i, 1] = y_lim/2 + R*np.sin(phi)*np.sin(theta)
+                r_list_0[i, 2] = z_lim/2 + R*np.cos(theta)
+                
+                
+            else:
+        
+                R = 10*random.expovariate(1)
+                phi = random.uniform(0, 2*np.pi) 
+                z = random.uniform(-0.5, 0.5)
+                
+                r_esf = [R, phi, z]
+                r_esf_tot[i] = r_esf 
+                
+                r_list_0[i, 0] = x_lim/2 + R*np.cos(phi)
+                r_list_0[i, 1] = y_lim/2 + R*np.sin(phi)
+                r_list_0[i, 2] = z_lim/2 + z
             
 
     f_list_0 = np.zeros((N, 3))
  
     
-    for u in prange(N):
+    for u in range(N):
         a_0 = 3.87*1e-3
         sumatorio_f = np.array([0,0,0])
         fuerza = fuerza_part(u, r_list_0, sumatorio_f)
@@ -187,8 +205,6 @@ def cond_inicial():
             else:
                 v_R = random.uniform(-0.1*v_esc, 0.1*v_esc)
             """
-            v_R = random.uniform(-0.4*v_esc, 0.4*v_esc)   
-            v_z = random.uniform(-0.05*v_esc, 0.05*v_esc)
             
             #producto vectorial de g con ur (vector unitario radial)
             g_vec = f_list_0[i]
@@ -202,33 +218,30 @@ def cond_inicial():
             ur = R_centro / R_norm
             prod =  abs(np.inner(g_vec, ur))
             
-            v_tan = np.sqrt(R_norm * prod)
+            v_circ = np.sqrt(R_norm * prod)
+            
+            phi_g = r_esf_tot[i, 1]
 
-            theta_g = np.arctan((r_list_0[i][1] - y_lim/2) / (r_list_0[i][0] - x_lim/2)) #ángulo respecto al centro galáctico
-            
-            ###################################
-            #arregle a la función arctan, para que se ajuste a nuestras necesidades
-            ###################################
-            if (r_list_0[i][1] - y_lim/2) < 0:
+            if N < N_b:
                 
-                if (r_list_0[i][0] - x_lim/2) < 0:
-                    
-                    theta_g = np.pi + theta_g
-                    
-                elif (r_list_0[i][0] - x_lim/2) < 0: 
-                    
-                    theta_g = np.pi + theta_g
+                theta_g = r_esf_tot[i, 2]    
+                v_r = random.uniform(-0.1*v_esc, 0.1*v_esc)   
+                v_z = v_circ*np.cos(theta_g)
+                v_tan = v_circ*np.sin(theta_g)
                 
-            elif (r_list_0[i][1] - y_lim/2) > 0:
+                v_list_0[i, 0] = k_vel * (-v_tan * np.sin(phi_g) + v_r * np.cos(phi_g))
+                v_list_0[i, 1] = k_vel * (v_tan * np.cos(phi_g) + v_r * np.sin(phi_g))
+                v_list_0[i, 2] = k_vel * v_z
                 
-                if (r_list_0[i][0]  - x_lim/2) < 0:
-                    
-                    theta_g = np.pi + theta_g
-            ###################################
-            ###################################
-            
-            
-            v_list_0[i] = k_vel*np.array([-v_tan*np.sin(theta_g) + v_R*np.cos(theta_g), v_tan*np.cos(theta_g) + v_R*np.sin(theta_g), v_z])
+            else:
+                
+                v_tan = v_circ
+                v_R = random.uniform(-0.1*v_esc, 0.1*v_esc)   
+                v_z = random.uniform(-0.05*v_esc, 0.05*v_esc)
+                
+                v_list_0[i, 0] = k_vel * (-v_tan * np.sin(phi_g) + v_R * np.cos(phi_g))
+                v_list_0[i, 1] = k_vel * (v_tan * np.cos(phi_g) + v_R * np.sin(phi_g))
+                v_list_0[i, 2] = k_vel * v_z
 
     return r_list_0, v_list_0, f_list_0
     
@@ -239,15 +252,16 @@ def cond_inicial():
 #Se aplica el algoritmo de Leapfrog para resolver los primeros pasos de tiempo
 #################################################################
 
+@jit(nopython=True, fastmath = True, parallel = False)
 def paso(r_list, v_list, f_list):
     
     a_0 = 3.87*1e-3
     
     r_list_new = r_list + dt*v_list + 0.5 * dt**2 * f_list
     
-    f_list_new = np.empty((N, 3), dtype = float)
+    f_list_new = np.empty((N, 3))
     
-    for u in prange(N):
+    for u in range(N):
         sumatorio_f = np.array([0,0,0])
         fuerza = fuerza_part(u, r_list_new, sumatorio_f)
         f_mod = np.sqrt(fuerza[0]**2 + fuerza[1]**2 + fuerza[2]**2)
@@ -269,15 +283,11 @@ def paso(r_list, v_list, f_list):
 #####################################################################################################
 #####################################################################################################
 
-
-def tiempo():
-
+def tiempo(r_list, v_list, f_list):
     #Lista de trayectorias de todas las partículas
-    tray = np.empty((n_r, N, 3), dtype = float)
-    tray_CM = np.empty((n_r, 3), dtype = float)
-    vels = np.empty((n_v, N, 3), dtype = float)
-
-    r_list, v_list, f_list = cond_inicial()
+    tray = np.empty((n_r, N, 3))
+    tray_CM = np.empty((n_r, 3))
+    vels = np.empty((n_v, N, 3))
 
     for k in range(n):
         #Estos son los indices de paso de tiempo para guardar r y v
@@ -285,15 +295,15 @@ def tiempo():
         k_v = int(k // div_v)
 
         R_CM = CM(r_list)
-
+        
         if k == 1:
             t0 = time.time()
-            r_list, v_list, f_list= paso(r_list, v_list, f_list)
+            r_list, v_list, f_list = paso(r_list, v_list, f_list)
             tf = time.time()
-            print("El programa va a tardar:", int(n*(tf-t0)/60),"minutos")
+            print("El programa va a tardar:", (n*(tf-t0)/60),"minutos")
         else:
             r_list, v_list, f_list= paso(r_list, v_list, f_list)
-
+            
         if k%div_r == 0.0:
  
             tray[k_r, :, :] = r_list[:, :]
@@ -302,10 +312,7 @@ def tiempo():
 
         if k%div_v == 0.0:
             print((k/n)*100, "%")
-
             vels[k_v, :, :] = v_list[:, :]
-
-    return tray, tray_CM, vels
 
     return tray, tray_CM, vels
       
@@ -316,8 +323,11 @@ def tiempo():
 ###########################################################################
 # Guaradamos todas las trayectorias obtenidas con el tiempo en tray
 ###########################################################################
+
+r_list_0, v_list_0, f_list_0 = cond_inicial()
+
 t0 = time.time()
-trayectorias, trayectoria_CM, velocidades = tiempo()    
+trayectorias, trayectoria_CM, velocidades = tiempo(r_list_0, v_list_0, f_list_0)    
 tf = time.time()
 
 print('El programa ha tardado: ', int(tf-t0), 'segundos en completar las trayectorias.')
