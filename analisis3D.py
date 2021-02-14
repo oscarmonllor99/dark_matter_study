@@ -17,7 +17,7 @@ Parámetros físicos
 
 """""""""""""""
 
-N = 20000 #Número de partículas
+N = 200000 #Número de partículas
 
 T_sol = 225 #periodo del Sol alrededor de la galaxia
 
@@ -29,8 +29,8 @@ M = 1e11 #en kg
 Parámetros de simulación
 
 """""""""""""""
-n = 10000 #número de pasos totales de tiempo
-div_r = 25
+n = 40000 #número de pasos totales de tiempo
+div_r = 100
 div_v = 100
 n_r = int(n / div_r) #numero de pasos de tiempo guardados para r
 n_v = int(n / div_v) #numero de pasos de tiempo guardados para v

@@ -52,7 +52,7 @@ hz = z_lim / l_p #distancia entre puntos de red eje Z
 
 dark = False
 print("Se consdiera la materia oscura?: ", dark)
-k_vel = 0.95 #parámetro de control de momento angular inicial (0--> velocidad angular inicial 0
+k_vel = 0.7 #parámetro de control de momento angular inicial (0--> velocidad angular inicial 0
 #                                                          1--> velocidad angular inicial máxima)
 ##############################################
 ##############################################
@@ -193,6 +193,8 @@ def cond_inicial():
 
     r_list_0 = np.zeros((N, 3))
     r_esf_tot = np.zeros((N, 3))
+    E_rot = 0
+    E_pot = 0
     
     for i in range(N):
              
@@ -255,9 +257,10 @@ def cond_inicial():
         
         if dark:
             phii = phi[x_pos, y_pos, z_pos] + pot_dark(r_list_0[i, :])
-            
+            E_pot += m*phii
         else:
             phii = phi[x_pos, y_pos, z_pos]
+            E_pot += m*phii
             
         v_esc = np.sqrt(-2 * phii)
 
@@ -278,8 +281,9 @@ def cond_inicial():
         ur = R_centro / R_norm
         prod = abs(np.dot(g_vec, ur))
         
-        v_circ = np.sqrt(R_norm * prod)
-            
+        v_circ = k_vel*np.sqrt(R_norm * prod)
+        E_rot += 0.5*m*v_circ**2 
+        
         phi_g = r_esf_tot[i, 1]
 
         if N < N_b:
@@ -297,11 +301,11 @@ def cond_inicial():
                 
                 v_tan = v_circ
                 v_R = random.uniform(-0.1*v_esc, 0.1*v_esc)   
-                v_z = random.uniform(-0.05*v_esc, 0.05*v_esc)
+                v_z = random.uniform(-0.01*v_esc, 0.01*v_esc)
                 
-                v_list_0[i, 0] = k_vel * (-v_tan * np.sin(phi_g) + v_R * np.cos(phi_g))
-                v_list_0[i, 1] = k_vel * (v_tan * np.cos(phi_g) + v_R * np.sin(phi_g))
-                v_list_0[i, 2] = k_vel * v_z
+                v_list_0[i, 0] = (-v_tan * np.sin(phi_g) + v_R * np.cos(phi_g))
+                v_list_0[i, 1] = (v_tan * np.cos(phi_g) + v_R * np.sin(phi_g))
+                v_list_0[i, 2] = v_z
 
 
     f_list_0 = np.zeros((N, 3))
@@ -309,7 +313,7 @@ def cond_inicial():
         force = fuerza(r_list_0, g, i)
         f_list_0[i, :] = force[:]
 
-
+    print('Ostriker-Peebles criterion (t ~< 0.14): ', E_rot/abs(E_pot))
     return r_list_0, v_list_0, f_list_0
 
 

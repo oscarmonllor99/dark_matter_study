@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import matplotlib.animation as animation
 from matplotlib import *
+import matplotlib
 
 ###########################################
 ##########################################
@@ -29,7 +30,7 @@ Parámetros físicos
 """""""""""""""
 M = 3245*2.325*1e7#masa total de las particulas q van a interactuar
 
-N = 20000 #Número de partículas
+N = 1000 #Número de partículas
 
 m = M / N #masa de las particulas en Msolares
 
@@ -39,14 +40,14 @@ T_sol = 225 #periodo del Sol alrededor de la galaxia
 Parámetros de simulación
 
 """""""""""""""
-salt = 10
+salt = 1
 
 lim = 100 
 
 x_lim, y_lim, z_lim = lim, lim, lim
 
-ntot = 10000 #número de pasos totales de tiempo
-div_r = 25
+ntot = 40000 #número de pasos totales de tiempo
+div_r = 100
 n = int(ntot / div_r) #numero de pasos de tiempo guardados para r
 
 dt = (T_sol / 2000) 
@@ -61,9 +62,6 @@ hz = z_lim / l_p #distancia entre puntos de red eje Y
 
 tray = np.loadtxt('trayectorias.dat', dtype = float)
 tray_3D = tray.reshape(n, N, 3)
-
-#tray = np.loadtxt('trayectorias.txt', dtype = float).reshape(n, N, 3)
-
 
 #creamos la figura
 fig, (ax1, ax2) = plt.subplots(1, 2)
@@ -130,18 +128,18 @@ rho = iterator_rho(np.empty((n, n_p+1, m_p+1)))
 rho_z = iterator_rho_z(np.empty((n, m_p+1, l_p+1)))
 
 
-contour = ax1.imshow(rho[0,:,:], cmap = 'nipy_spectral', norm=colors.LogNorm(), interpolation = 'gaussian')
-ax2.imshow(rho_z[0,:,:], cmap = 'nipy_spectral', norm=colors.LogNorm(), interpolation = 'gaussian')
+im1 = ax1.imshow(rho[0,:,:], cmap = 'nipy_spectral', norm=colors.LogNorm(), interpolation = 'gaussian')
+im2 = ax2.imshow(rho_z[0,:,:], cmap = 'nipy_spectral', norm=colors.LogNorm(), interpolation = 'gaussian')
 txt = fig.suptitle('{:d} millones de años'.format(int(0*div_r*dt)))
-colorbar = fig.colorbar(contour, fraction = 0.15)
+colorbar = fig.colorbar(im1, fraction = 0.15)
 colorbar.ax.set_xlabel('$M_0$')
 
 def animation_frame(k):
         
     txt.set_text('{:d} millones de años'.format(int(k*div_r*dt)))
     
-    ax1.imshow(rho[k,:,:], cmap = 'nipy_spectral', norm=colors.LogNorm(), interpolation = 'gaussian')
-    ax2.imshow(rho_z[k,:,:], cmap = 'nipy_spectral', norm=colors.LogNorm(), interpolation = 'gaussian')
+    im1.set_array(rho[k,:,:])
+    im2.set_array(rho_z[k,:,:])
     
     return txt
             
@@ -153,6 +151,6 @@ movimiento = FuncAnimation(fig, func=animation_frame, frames=np.arange(1, n, sal
 if save:
         # Set up formatting for the movie files
         Writer = animation.writers['ffmpeg']
-        writer = Writer(fps=5, metadata=dict(artist='Me'), bitrate=1800)
+        writer = Writer(fps=30, metadata=dict(artist='Me'), bitrate=1800)
         movimiento.save('movimiento_surface.mp4', writer=writer)
 

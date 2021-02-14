@@ -45,15 +45,10 @@ n_v = int(n // div_v) #numero de pasos de tiempo guardados para v
 
 dt = T_sol / 2000 #intervalo de tiempo entre cada paso
 
-#Parámetros para calcular el potencial y su gradiente
-
-N_p = 10000 #número de pasos común a los dos ejes, es decir, número de celdas para calcular
-#el gradiente de la gravedad
-
 d_min = 0.05 #distancia minima a la cual se debe calcular la fuerza en kpc
 eps = np.sqrt(2*d_min / 3**(3/2)) 
 
-k_vel=0.95#parámetro de control de momento angular inicial (0--> velocidad angular inicial 0
+k_vel=0.6#parámetro de control de momento angular inicial (0--> velocidad angular inicial 0
 #                                                          1--> velocidad angular inicial máxima)
 ##############################################
 ##############################################
@@ -139,7 +134,8 @@ def cond_inicial():
     
     r_list_0 = np.zeros((N, 3))
     r_esf_tot = np.zeros((N, 3))
-    
+    E_rot = 0
+    E_pot = 0
     for i in range(N):
              
             if i < N_b:
@@ -196,7 +192,8 @@ def cond_inicial():
             sumatorio_E = 0.
 
             Ui = ener_pot(i, r_list_0, sumatorio_E)  
-           
+            E_pot += Ui
+            
             v_esc = np.sqrt(-2*Ui/m)
             
             """
@@ -218,10 +215,11 @@ def cond_inicial():
             ur = R_centro / R_norm
             prod =  abs(np.inner(g_vec, ur))
             
-            v_circ = np.sqrt(R_norm * prod)
+            v_circ = k_vel*np.sqrt(R_norm * prod)
+            E_rot += 0.5*m*v_circ**2 
             
             phi_g = r_esf_tot[i, 1]
-
+    
             if N < N_b:
                 
                 theta_g = r_esf_tot[i, 2]    
@@ -237,12 +235,13 @@ def cond_inicial():
                 
                 v_tan = v_circ
                 v_R = random.uniform(-0.1*v_esc, 0.1*v_esc)   
-                v_z = random.uniform(-0.05*v_esc, 0.05*v_esc)
+                v_z = random.uniform(-0.01*v_esc, 0.01*v_esc)
                 
-                v_list_0[i, 0] = k_vel * (-v_tan * np.sin(phi_g) + v_R * np.cos(phi_g))
-                v_list_0[i, 1] = k_vel * (v_tan * np.cos(phi_g) + v_R * np.sin(phi_g))
-                v_list_0[i, 2] = k_vel * v_z
+                v_list_0[i, 0] = (-v_tan * np.sin(phi_g) + v_R * np.cos(phi_g))
+                v_list_0[i, 1] = (v_tan * np.cos(phi_g) + v_R * np.sin(phi_g))
+                v_list_0[i, 2] = v_z
 
+    print('Ostriker-Peebles criterion (t ~< 0.14): ', E_rot/abs(E_pot))
     return r_list_0, v_list_0, f_list_0
     
 #################################################################
@@ -300,7 +299,7 @@ def tiempo(r_list, v_list, f_list):
             t0 = time.time()
             r_list, v_list, f_list = paso(r_list, v_list, f_list)
             tf = time.time()
-            print("El programa va a tardar:", (n*(tf-t0)/60),"minutos")
+            print("El programa va a tardar:", int(n*(tf-t0)/60),"minutos")
         else:
             r_list, v_list, f_list= paso(r_list, v_list, f_list)
             
@@ -315,7 +314,7 @@ def tiempo(r_list, v_list, f_list):
             vels[k_v, :, :] = v_list[:, :]
 
     return tray, tray_CM, vels
-      
+
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -330,7 +329,7 @@ t0 = time.time()
 trayectorias, trayectoria_CM, velocidades = tiempo(r_list_0, v_list_0, f_list_0)    
 tf = time.time()
 
-print('El programa ha tardado: ', int(tf-t0), 'segundos en completar las trayectorias.')
+print('El programa ha tardado: ', ((tf-t0)/60), 'minutos en completar las trayectorias.')
 trayectorias3D = trayectorias.reshape(trayectorias.shape[0], -1) 
 velocidades3D = velocidades.reshape(velocidades.shape[0], -1) 
 
