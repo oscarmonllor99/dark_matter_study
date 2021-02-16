@@ -32,23 +32,8 @@ def interpolation(y):
 
 @jit(nopython=True, fastmath = True, parallel = False)
 def CM(r_list):
-    
     M = NUM_PARTICLES * M_TOTAL
-    
-    #listas que tiene la posicion de cada particula por su masa
-    Xm = np.empty((NUM_PARTICLES))
-    Ym = np.empty((NUM_PARTICLES))
-    Zm = np.empty((NUM_PARTICLES))
-    
-    Xm[:] = r_list[:, 0] * M_TOTAL
-    Ym[:] = r_list[:, 1] * M_TOTAL
-    Zm[:] = r_list[:, 2] * M_TOTAL
-    
-    X_CM = np.sum(Xm) / M
-    Y_CM = np.sum(Ym) / M
-    Z_CM = np.sum(Zm) / M
-
-    return np.array([X_CM, Y_CM, Z_CM])
+    return np.sum(r_list * M_TOTAL, axis=0) / M
 
 @jit(nopython=True, fastmath = True, parallel = False)
 def fuerza_part(i, r_list, sumatorio_f, eps):
@@ -74,12 +59,8 @@ def ener_pot(i, r_list, sumatorio_E, eps):
     for j in range(NUM_PARTICLES):
         if j != i:
 
-            rx = r_list[i, 0] - r_list[j, 0] 
-            ry = r_list[i, 1] - r_list[j, 1] 
-            rz = r_list[i, 2] - r_list[j, 2] 
-
-            rij2 = rx*rx + ry*ry + rz*rz
-
+            r = r_list[i] - r_list[j]
+            rij2 = np.sum(r**2)
             sumatorio_E = sumatorio_E +  M_TOTAL**2 * (1 / (eps**2 + rij2))**(1 / 2)
 
     return sumatorio_E * (-G)
