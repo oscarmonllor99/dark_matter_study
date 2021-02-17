@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import matplotlib.animation as animation
-from matplotlib import *
+from matplotlib import colors
 import matplotlib
 
 ###########################################
@@ -23,45 +23,41 @@ save = True
 ###########################################
 ##########################################
 
+sim_parameters = np.loadtxt('parameters.dat')
 
-"""""""""""""""
-Parámetros físicos
-
-"""""""""""""""
-M = 3245*2.325*1e7#masa total de las particulas q van a interactuar
-
-N = 1000 #Número de partículas
-
+##############################################
+######### PARÁMETROS FÍSICOS  ################
+##############################################
+N = int(sim_parameters[0]) #Número de partículas
+N_b = int(0.14 * N) #el 14% de la materia ordinaria es del bulbo
+M = 3245*2.325*1e7 #masa total de las particulas q van a interactuar
 m = M / N #masa de las particulas en Msolares
+G = 4.518 * 1e-12 #constante de gravitación universal en Kpc, Msolares y Millones de años
+##############################################
+##############################################
 
-T_sol = 225 #periodo del Sol alrededor de la galaxia
-
-"""""""""""""""
-Parámetros de simulación
-
-"""""""""""""""
+##############################################
+######### PARÁMETROS DE SIMULACION ################
+##############################################
 salt = 1
 
-lim = 100 
+lim = sim_parameters[1]
 
-x_lim, y_lim, z_lim = lim, lim, lim
-
-ntot = 40000 #número de pasos totales de tiempo
-div_r = 100
+ntot = int(sim_parameters[2])
+div_r = int(sim_parameters[3])
 n = int(ntot / div_r) #numero de pasos de tiempo guardados para r
 
-dt = (T_sol / 2000) 
-N_p = 100
-n_p = N_p 
-m_p = N_p 
-l_p = 100
+dt = sim_parameters[5]
 
-hx = x_lim / n_p #distancia entre puntos de red eje X
-hy = y_lim / m_p #distancia entre puntos de red eje Y
-hz = z_lim / l_p #distancia entre puntos de red eje Y
+Np = 100
+
+h = lim/Np
 
 tray = np.loadtxt('trayectorias.dat', dtype = float)
 tray_3D = tray.reshape(n, N, 3)
+
+tray_CM = np.loadtxt('trayectoria_CM.dat', dtype = float)
+R_CM = tray_CM.reshape(n,3)
 
 #creamos la figura
 fig, (ax1, ax2) = plt.subplots(1, 2)
@@ -74,40 +70,40 @@ ax2.set_xlabel('Side')
 #tray[paso de tiempo, particula, eje]
 @jit(nopython=True, fastmath = True)
 def densidad(r_list_0):
-    rho = np.ones((n_p + 1, m_p + 1))
+    rho = np.ones((Np + 1, Np + 1))
     for i in range(N):
-        x_pos = int(r_list_0[i,0] / hx)
-        y_pos = int(r_list_0[i,1] / hy)
+        x_pos = int(r_list_0[i,0] / h)
+        y_pos = int(r_list_0[i,1] / h)
         
-        if x_pos <= 0 or x_pos >= N_p or y_pos <= 0 or y_pos >= N_p:
+        if x_pos <= 0 or x_pos >= Np or y_pos <= 0 or y_pos >= Np:
             
             pass
         
         else:
         
-            rho[y_pos, x_pos] += m / (hx*hy)
+            rho[y_pos, x_pos] += m / h**2
 
     return rho
 
 @jit(nopython=True, fastmath = True)
 def densidad_z(r_list_0):
-    rho = np.ones((m_p + 1, l_p + 1))
+    rho = np.ones((Np + 1, Np+ 1))
     for i in range(N):
-        y_pos = int(r_list_0[i,1] / hy)
-        z_pos = int(r_list_0[i,2] / hz)
+        y_pos = int(r_list_0[i,1] / h)
+        z_pos = int(r_list_0[i,2] / h)
         
-        if y_pos <= 0 or y_pos >= m_p or z_pos <= 0 or z_pos >= l_p:
+        if y_pos <= 0 or y_pos >= Np or z_pos <= 0 or z_pos >= Np:
             
             pass
         
         else:
-            rho[z_pos, y_pos] += m / (hy*hz)
+            rho[z_pos, y_pos] += m / h**2
     return rho
 
 
-x = np.arange(0, x_lim + hx, hx)
-y = np.arange(0, y_lim + hy, hy)
-z = np.arange(0, z_lim + hz, hz)
+x = np.arange(0, lim + h, h)
+y = np.arange(0, lim + h, h)
+z = np.arange(0, lim + h, h)
 
 X, Y = np.meshgrid(x,y)
 Y_z, Z_z = np.meshgrid(y, z)
@@ -124,12 +120,16 @@ def iterator_rho_z(rho_z):
         rho_z[k, :, :] = densidad_z(tray_3D[k, :, :])
     return rho_z
 
-rho = iterator_rho(np.empty((n, n_p+1, m_p+1)))
-rho_z = iterator_rho_z(np.empty((n, m_p+1, l_p+1)))
+rho = iterator_rho(np.empty((n, Np+1, Np+1)))
+rho_z = iterator_rho_z(np.empty((n, Np+1, Np+1)))
 
 
 im1 = ax1.imshow(rho[0,:,:], cmap = 'nipy_spectral', norm=colors.LogNorm(), interpolation = 'gaussian')
+scatter_CM1 = ax1.scatter(R_CM[0,0], R_CM[0,1], c = 'white', s=1000000, 
+                          marker = '+', linewidths=1, alpha = 0.5)
 im2 = ax2.imshow(rho_z[0,:,:], cmap = 'nipy_spectral', norm=colors.LogNorm(), interpolation = 'gaussian')
+scatter_CM2 = ax2.scatter(R_CM[0,1], R_CM[0,2], c = 'white', s=1000000, 
+                          marker = '+', linewidths=1, alpha = 0.5)
 txt = fig.suptitle('{:d} millones de años'.format(int(0*div_r*dt)))
 colorbar = fig.colorbar(im1, fraction = 0.15)
 colorbar.ax.set_xlabel('$M_0$')
@@ -137,8 +137,9 @@ colorbar.ax.set_xlabel('$M_0$')
 def animation_frame(k):
         
     txt.set_text('{:d} millones de años'.format(int(k*div_r*dt)))
-    
+    scatter_CM1.set_offsets([R_CM[k,0], R_CM[k,1]])
     im1.set_array(rho[k,:,:])
+    scatter_CM2.set_offsets([R_CM[k,1], R_CM[k,2]])
     im2.set_array(rho_z[k,:,:])
     
     return txt

@@ -2,71 +2,20 @@ import numpy as np
 from numba import jit
 import random
 import time
+import argparse
 ##############################################
 ######### PARÁMETROS FÍSICOS  ################
 ##############################################
-
-N = 200000 #Número de partículas
-
-N_b = int(0.14*N) #el 30% de la materia ordinaria es del bulbo
-
-M = 3245*2.325*1e7#masa total de las particulas q van a interactuar: fraccion no significativa de la total galactica.
-
-m = M / N #masa de las particulas en Msolares
-
+NUM_PARTICLES = 200000 #Número de partículas
+NUM_PARTICLES_BULGE = int(0.14 * NUM_PARTICLES) #el 14% de la materia ordinaria es del bulbo
+M_TOTAL = 3245*2.325*1e7 #masa total de las particulas q van a interactuar
+M_PARTICLE = M_TOTAL / NUM_PARTICLES #masa de las particulas en Msolares
 G = 4.518 * 1e-12 #constante de gravitación universal en Kpc, Msolares y Millones de años
-
-T_sol = 225 #periodo del Sol alrededor de la galaxia en Millones de años
-
+T_SOL = 225 #periodo del Sol alrededor de la galaxia en Millones de años
 ##############################################
 ##############################################
 
-##############################################
-### PARÁMETROS DE SIMULACIÓN
-##############################################
 
-lim = 100 #en kpc
-
-x_lim = lim
-y_lim = lim
-z_lim = lim
-
-n = 40000  #número de pasos totales de tiempo
-div_r = 100
-div_v = 100
-n_r = int(n / div_r) #numero de pasos de tiempo guardados para r
-n_v = int(n / div_v) #numero de pasos de tiempo guardados para v
-dt = T_sol / 2000 #intervalo de tiempo entre cada paso
-
-#Parámetros para calcular el potencial y su gradiente
-
-N_p = 100 #número de pasos común a los dos ejes, es decir, número de celdas para calcular
-#el gradiente de la gravedad
-n_p = N_p #número de celdas en el eje X
-m_p = N_p #número de celdas en el eje Y
-l_p = 100 #número de celdas en el eje Z
-
-hx = x_lim / n_p #distancia entre puntos de red eje X
-hy = y_lim / m_p #distancia entre puntos de red eje Y
-hz = z_lim / l_p #distancia entre puntos de red eje Z
-
-dark = False
-print("Se consdiera la materia oscura?: ", dark)
-k_vel = 0.7 #parámetro de control de momento angular inicial (0--> velocidad angular inicial 0
-#                                                          1--> velocidad angular inicial máxima)
-##############################################
-##############################################
-r0 = np.zeros((n_p, m_p, l_p))
-
-@jit(nopython=True, fastmath = True)
-def bordes(r):
-    for i in range(n_p):
-        for j in range(m_p):
-            for k in range(l_p):
-                r[i, j, k] = np.sqrt(((i-n_p/2)*hx)**2 + ((j-m_p/2)*hy)**2 + ((k-l_p/2)*hz)**2)
-    return r
-
-r = bordes(r0)
 ##############################################
 ### FUNCIONES A UTILIZAR ###
 ##############################################
@@ -77,11 +26,11 @@ def factor_r(r):
     return (1/r**3)*np.log(1+r/ah) - 1/(ah*r**2 + r**3)
 
 @jit(nopython=True, fastmath = True, parallel = False)
-def f_dark(r_vec):
+def f_dark(r_vec, lim):
     r_dark = np.zeros(3)
-    r_dark[0] = r_vec[0] - x_lim/2
-    r_dark[1] = r_vec[1] - y_lim/2
-    r_dark[2] = r_vec[2] - z_lim/2
+    r_dark[0] = r_vec[0] - lim/2
+    r_dark[1] = r_vec[1] - lim/2
+    r_dark[2] = r_vec[2] - lim/2
     #MODELO 3: Navarro-Frenk-White
     Mh = 12474 * 2.325*1e7
     r = np.sqrt(np.dot(r_dark, r_dark))
@@ -92,11 +41,11 @@ def f_dark(r_vec):
     return g
 
 @jit(nopython=True, fastmath = True, parallel = False)
-def pot_dark(r_vec):
+def pot_dark(r_vec, lim):
     r_dark = np.zeros(3)
-    r_dark[0] = r_vec[0] - x_lim/2
-    r_dark[1] = r_vec[1] - y_lim/2
-    r_dark[2] = r_vec[2] - z_lim/2
+    r_dark[0] = r_vec[0] - lim/2
+    r_dark[1] = r_vec[1] - lim/2
+    r_dark[2] = r_vec[2] - lim/2
     #MODELO 3: Navarro-Frenk-White
     Mh = 12474 * 2.325*1e7
     ah = 7.7
@@ -104,84 +53,70 @@ def pot_dark(r_vec):
     if r > 0.0:
         return (-G*Mh/r)*np.log(1 + r/ah)
     else:
-        return 0
-    
+        return 0.0
+
 @jit(nopython=True, fastmath = True, parallel = False)
 def CM(r_list):
-    M = N*m
-
-    Xm = np.empty((N))
-    Ym = np.empty((N))
-    Zm = np.empty((N))
-    
-    Xm[:] = r_list[:, 0] * m
-    Ym[:] = r_list[:, 1] * m
-    Zm[:] = r_list[:, 2] * m
-    
-    X_CM = np.sum(Xm) / M
-    Y_CM = np.sum(Ym) / M
-    Z_CM = np.sum(Zm) / M
-    return np.array([X_CM, Y_CM, Z_CM])
+    return np.sum(r_list * M_PARTICLE, axis=0) / M_TOTAL
 
 @jit(nopython=True, fastmath = True)
-def fuerza(r_list, g, i):
+def fuerza(r_list, g, i, dark, Np, h, lim):
 
     r_list_i = r_list[i, :]
-    
     #identificamos en qué celda está la partícula
-    x_pos =  int(r_list_i[0]/hx)
-    y_pos =  int(r_list_i[1]/hy)
-    z_pos =  int(r_list_i[2]/hz)
+    x_pos =  int(r_list_i[0]/h)
+    y_pos =  int(r_list_i[1]/h)
+    z_pos =  int(r_list_i[2]/h)
 
-    if x_pos <= 0 or x_pos >= N_p or y_pos <= 0 or y_pos >= N_p or z_pos <= 0 or z_pos >= l_p:
+    if x_pos <= 0 or x_pos >= Np or y_pos <= 0 or y_pos >= Np or z_pos <= 0 or z_pos >= Np:
 
-        return np.array([0.,0.,0.])
+        return np.zeros(3)
 
     else:
 
         if dark:
-            return g[:, x_pos, y_pos, z_pos] + f_dark(r_list_i)
+            return g[:, x_pos, y_pos, z_pos] + f_dark(r_list_i, lim)
         else:
             return g[:, x_pos, y_pos, z_pos]
         
 @jit(nopython=True, fastmath = True, parallel = False)
-def densidad(r_list_0):
-    rho = np.zeros((n_p, m_p, l_p))
-    for i in range(len(r_list_0)):
+def densidad(r_list, Np, h):
+    rho = np.zeros((Np, Np, Np))
+    for i in range(NUM_PARTICLES):
         
-        x_pos = int(r_list_0[i,0] / hx)
-        y_pos = int(r_list_0[i,1] / hy)
-        z_pos = int(r_list_0[i,2] / hz)
+        x_pos = int(r_list[i,0] / h)
+        y_pos = int(r_list[i,1] / h)
+        z_pos = int(r_list[i,2] / h)
         
-        if x_pos <= 0 or x_pos >= N_p or y_pos <= 0 or y_pos >= N_p or z_pos <= 0 or z_pos >= l_p:
+        if x_pos <= 0 or x_pos >= Np or y_pos <= 0 or y_pos >= Np or z_pos <= 0 or z_pos >= Np:
             
             pass
         
         else:
         
-            rho[x_pos, y_pos, z_pos] += m / (hx*hy*hz)
+            rho[x_pos, y_pos, z_pos] += M_PARTICLE / h**3
 
     return rho
 
 @jit(nopython=True, fastmath = True)
-def poisson(rho, phi):
+def poisson(rho, phi, Np, h):
     w = 0.95
     pasos = 100
     for u in range(pasos):
-        for i in range(1, n_p-1):
-            for j in range(1, m_p-1):
-                for k in range(1, l_p-1):
-                    phi[i, j, k] = (1+w)*(1/(4/hx**2 + 2/hz**2))*((1/hx**2)*(phi[i+1, j, k] + phi[i-1, j, k]
-                                                                         + phi[i, j+1, k] + phi[i, j-1, k])
-                                                                         + (1/hz**2)*(phi[i, j, k+1] + phi[i, j, k-1])
-                                                                         - 4*np.pi*G*rho[i, j, k]) - w*phi[i, j, k]
+        for i in range(1, Np-1):
+            for j in range(1, Np-1):
+                for k in range(1, Np-1):
+                    phi[i, j, k] = (1.+w)*(1/6)*(phi[i+1, j, k] + phi[i-1, j, k]
+                                         + phi[i, j+1, k] + phi[i, j-1, k]
+                                         + phi[i, j, k+1] + phi[i, j, k-1]
+                                         - h**2 * 4.*np.pi*G*rho[i, j, k]) - w*phi[i, j, k]
     return phi
 
-def gradiente(phi):
+def gradiente(phi, h, lim):
     
-    x = np.arange(0, x_lim, hx) 
-    y = np.arange(0, y_lim, hy)
-    z = np.arange(0, z_lim, hz)
+    x = np.arange(0, lim, h) 
+    y = np.arange(0, lim, h)
+    z = np.arange(0, lim, h)
     
     g = np.array(np.gradient(phi, x, y, z))
     #El array es del tipo g[componente][NpuntosX][NpuntosY][NpuntosZ]
@@ -189,21 +124,20 @@ def gradiente(phi):
 ###########################################################################
 ###########################################################################
 
-def cond_inicial():
+def cond_inicial(lim, k_vel, eps, dark, Np, h, phi0):
 
-    r_list_0 = np.zeros((N, 3))
-    r_esf_tot = np.zeros((N, 3))
+    r_list_0 = np.zeros((NUM_PARTICLES, 3), dtype = float)
+    r_esf_tot = np.zeros((NUM_PARTICLES, 3), dtype = float)
     E_rot = 0
     E_pot = 0
     
-    for i in range(N):
+    for i in range(NUM_PARTICLES):
              
-            if i < N_b:
+            if i < NUM_PARTICLES_BULGE:
                 
                 R = random.uniform(0.1, 3)
                 while R>49:
-                     R = random.uniform(0.1, 3)
-                    
+                    R = random.uniform(0.1, 3)
                 
                 theta = random.uniform(0, np.pi)
                 phi = random.uniform(0, 2*np.pi)
@@ -211,82 +145,73 @@ def cond_inicial():
                 r_esf = [R, phi, theta]
                 r_esf_tot[i] = r_esf 
                 
-                r_i = [x_lim/2 + R*np.cos(phi)*np.sin(theta), y_lim/2 + 
-                                  R*np.sin(phi)*np.sin(theta), z_lim/2 
-                                  + R*np.cos(theta)]
-                
-                r_list_0[i] = r_i
+                r_list_0[i, 0] = lim/2 + R*np.cos(phi)*np.sin(theta)
+                r_list_0[i, 1] = lim/2 + R*np.sin(phi)*np.sin(theta)
+                r_list_0[i, 2] = lim/2 + R*np.cos(theta)
                 
                 
             else:
-        
+                
                 R = 10*random.expovariate(1)
                 while R>49:
-                     R = 10*random.expovariate(1)
+                    R = 10*random.expovariate(1)
+                    
                 phi = random.uniform(0, 2*np.pi) 
                 z = random.uniform(-0.5, 0.5)
                 
                 r_esf = [R, phi, z]
                 r_esf_tot[i] = r_esf 
                 
-                r_i = [x_lim/2 + R*np.cos(phi), y_lim/2 + R*np.sin(phi), z_lim/2 + z]
-                
-                r_list_0[i] = r_i
+                r_list_0[i, 0] = lim/2 + R*np.cos(phi)
+                r_list_0[i, 1] = lim/2 + R*np.sin(phi)
+                r_list_0[i, 2] = lim/2 + z
+
             
-    rho = densidad(r_list_0)
+    rho = densidad(r_list_0, Np, h)
     
-    phi0 = np.zeros((n_p, m_p, l_p), dtype = float) 
-    #PLANOS DE CONDICIONES DE FRONTERA
-    phi0[:, :, 0] = -G*M/(r[:, :, 0])
-    phi0[:, :, l_p-1] = -G*M/(r[:, :, l_p-1])
-    phi0[:, 0, :] = -G*M/(r[:, 0, :])
-    phi0[:, N_p-1, :] = -G*M/(r[:, N_p-1, :])
-    phi0[0, :, :] = -G*M/(r[0, :, :])
-    phi0[N_p-1, :, :] = -G*M/(r[N_p-1, :, :])
-    
-    phi = poisson(rho, phi0)
-    g = gradiente(phi)
+    phi = poisson(rho, phi0, Np, h)
+    g = gradiente(phi, h, lim)
 
-    v_list_0 = np.zeros((N, 3))
+    v_list_0 = np.zeros((NUM_PARTICLES, 3), dtype = float)
     
-    for i in range(N):
+    for i in range(NUM_PARTICLES):
 
-        x_pos =  int(r_list_0[i,0] // hx)
-        y_pos =  int(r_list_0[i,1] // hy)
-        z_pos =  int(r_list_0[i,2] // hz)
+        x_pos =  int(r_list_0[i,0] // h)
+        y_pos =  int(r_list_0[i,1] // h)
+        z_pos =  int(r_list_0[i,2] // h)
         
         if dark:
-            phii = phi[x_pos, y_pos, z_pos] + pot_dark(r_list_0[i, :])
-            E_pot += m*phii
+            phii = phi[x_pos, y_pos, z_pos] + pot_dark(r_list_0[i, :], lim)
+            E_pot += M_PARTICLE*phii
         else:
             phii = phi[x_pos, y_pos, z_pos]
-            E_pot += m*phii
+            E_pot += M_PARTICLE*phii
             
         v_esc = np.sqrt(-2 * phii)
 
         #producto de g con ur (vector unitario radial)
         if dark:
-            g_vec = g[:, x_pos, y_pos, z_pos] + f_dark(r_list_0[i])
+            g_vec = g[:, x_pos, y_pos, z_pos] + f_dark(r_list_0[i], lim)
             
         else:
             g_vec = g[:, x_pos, y_pos, z_pos]
         
 
         R_centro = np.zeros(3)
-        R_centro[0] = r_list_0[i, 0] - x_lim/2
-        R_centro[1] = r_list_0[i, 1] - y_lim/2
-        R_centro[2] = r_list_0[i, 2] - z_lim/2
+        R_centro[0] = r_list_0[i, 0] - lim/2
+        R_centro[1] = r_list_0[i, 1] - lim/2
+        R_centro[2] = r_list_0[i, 2] - lim/2
 
         R_norm = np.sqrt(np.dot(R_centro, R_centro))
         ur = R_centro / R_norm
         prod = abs(np.dot(g_vec, ur))
         
         v_circ = k_vel*np.sqrt(R_norm * prod)
-        E_rot += 0.5*m*v_circ**2 
+        E_rot += 0.5*M_PARTICLE*v_circ**2 
         
         phi_g = r_esf_tot[i, 1]
 
-        if N < N_b:
+        if i < NUM_PARTICLES_BULGE:
                 
                 theta_g = r_esf_tot[i, 2]    
                 v_r = random.uniform(-0.1*v_esc, 0.1*v_esc)   
@@ -307,11 +232,12 @@ def cond_inicial():
                 v_list_0[i, 1] = (v_tan * np.cos(phi_g) + v_R * np.sin(phi_g))
                 v_list_0[i, 2] = v_z
 
-
-    f_list_0 = np.zeros((N, 3))
-    for i in range(N):
-        force = fuerza(r_list_0, g, i)
-        f_list_0[i, :] = force[:]
+    f_list_0 = np.zeros((NUM_PARTICLES, 3))
+    for i in range(NUM_PARTICLES):
+        force = fuerza(r_list_0, g, i, dark, Np, h, lim)
+        f_list_0[i, 0] = force[0]
+        f_list_0[i, 1] = force[1]
+        f_list_0[i, 2] = force[2]
 
     print('Ostriker-Peebles criterion (t ~< 0.14): ', E_rot/abs(E_pot))
     return r_list_0, v_list_0, f_list_0
@@ -323,36 +249,28 @@ def cond_inicial():
 #################################################################
 #Se aplica el algoritmo de Leapfrog para resolver los primeros pasos de tiempo
 #################################################################
+
 @jit(nopython=True, fastmath = True)
-def force_update(r_list_new, g):
-    f_list_new = np.zeros((N, 3))
-    for i in range(N):
-        force = fuerza(r_list_new, g, i)
+def force_update(r_list_new, g, dark, Np, h, lim):
+    f_list_new = np.zeros((NUM_PARTICLES, 3))
+    for i in range(NUM_PARTICLES):
+        force = fuerza(r_list_new, g, i, dark, Np, h, lim)
         f_list_new[i, 0] = force[0]
         f_list_new[i, 1] = force[1]
         f_list_new[i, 2] = force[2]
     return f_list_new 
 
-def paso(r_list, v_list, f_list):
+
+def paso(r_list, v_list, f_list, dt, eps, dark, lim, 
+          Np, h, phi0):
 
     r_list_new = r_list + dt*v_list + 0.5 * dt**2 * f_list
  
-    rho = densidad(r_list_new)
+    rho = densidad(r_list_new, Np, h)
+    phi = poisson(rho, phi0, Np, h)
+    g = gradiente(phi, h, lim)
     
-    phi0 = np.zeros((n_p, m_p, l_p)) 
-    #PLANOS DE CONDICIONES DE FRONTERA
-    phi0[:, :, 0] = -G*M/(r[:, :, 0])
-    phi0[:, :, l_p-1] = -G*M/(r[:, :, l_p-1])
-    phi0[:, 0, :] = -G*M/(r[:, 0, :])
-    phi0[:, N_p-1, :] = -G*M/(r[:, N_p-1, :])
-    phi0[0, :, :] = -G*M/(r[0, :, :])
-    phi0[N_p-1, :, :] = -G*M/(r[N_p-1, :, :])
-    
-    phi = poisson(rho, phi0)
-
-    g = gradiente(phi)
-    
-    f_list_new = force_update(r_list_new, g)
+    f_list_new = force_update(r_list_new, g, dark, Np, h, lim)
 
     v_list_new = v_list + 0.5*dt*(f_list_new + f_list)
 
@@ -371,34 +289,38 @@ def paso(r_list, v_list, f_list):
 #####################################################################################################
 #####################################################################################################
 
-def tiempo(r_list, v_list, f_list):
+
+def tiempo(r_list, v_list, f_list, n, n_r, 
+           n_v, div_r, div_v, dt, eps, dark, lim,
+            Np, h, phi0):
+    
     #Lista de trayectorias de todas las partículas
-    tray = np.empty((n_r, N, 3))
+    tray = np.empty((n_r, NUM_PARTICLES, 3))
     tray_CM = np.empty((n_r, 3))
-    vels = np.empty((n_v, N, 3))
+    vels = np.empty((n_v, NUM_PARTICLES, 3))
 
     for k in range(n):
         #Estos son los indices de paso de tiempo para guardar r y v
-        k_r = int(k // div_r)
-        k_v = int(k // div_v)
 
         R_CM = CM(r_list)
         
         if k == 1:
             t0 = time.time()
-            r_list, v_list, f_list = paso(r_list, v_list, f_list)
+            r_list, v_list, f_list = paso(r_list, v_list, f_list, dt, eps, dark, lim,
+                                          Np, h, phi0)
             tf = time.time()
             print("El programa va a tardar:", int(n*(tf-t0)/60),"minutos")
         else:
-            r_list, v_list, f_list= paso(r_list, v_list, f_list)
+            r_list, v_list, f_list= paso(r_list, v_list, f_list, dt, eps, dark, lim,
+                                         Np, h, phi0)
             
         if k%div_r == 0.0:
- 
+            k_r = int(k // div_r)
             tray[k_r, :, :] = r_list[:, :]
-
             tray_CM[k_r, :] = R_CM[:]
 
         if k%div_v == 0.0:
+            k_v = int(k // div_v)
             print((k/n)*100, "%")
             vels[k_v, :, :] = v_list[:, :]
 
@@ -408,22 +330,129 @@ def tiempo(r_list, v_list, f_list):
 ####################################################################################
 ####################################################################################
 
-###########################################################################
-# Guaradamos todas las trayectorias obtenidas con el tiempo en tray
-###########################################################################
 
-r_list_0, v_list_0, f_list_0 = cond_inicial()
+#############################
+# MAIN
+###########################
 
-t0 = time.time()
-trayectorias, trayectoria_CM, velocidades = tiempo(r_list_0, v_list_0, f_list_0)    
-tf = time.time()
+def main(args):
+    ##############################################
+    ### PARÁMETROS DE SIMULACIÓN
+    ##############################################
+    LIM = args.lim #en kpc
+    TIME_STEPS = args.time_step #número de pasos totales de tiempo 
+    DIV_R = args.div_r
+    DIV_V = args.div_v
+    N_R = int(TIME_STEPS // DIV_R) #numero de pasos de tiempo guardados para r
+    N_V = int(TIME_STEPS // DIV_V) #numero de pasos de tiempo guardados para v
+    DT = T_SOL / 2000 #intervalo de tiempo entre cada paso
+    D_MIN = args.dmin #distancia minima a la cual se debe calcular la fuerza en kpc
+    EPS = np.sqrt(2*D_MIN / 3**(3/2)) 
+    K_VEL= args.k_vel#parámetro de control de momento angular inicial (0--> velocidad angular inicial 0
+    #                                                          1--> velocidad angular inicial máxima)
+    DARK = args.dark #hay materia oscura o no
+    NP = args.Nc #celdas en cada eje
+    H = LIM / NP #distancia entre puntos de red eje X
+    
+    simulation_parameters = np.array([NUM_PARTICLES, LIM, TIME_STEPS, DIV_R, DIV_V, DT, NP, EPS, K_VEL, DARK])
+    np.savetxt('parameters.dat', simulation_parameters, fmt = '%.5e')
+    ##############################################
+    ##############################################
+    
+    R0 = np.zeros((NP, NP, NP)) #para las condiciones de contorno del potencial
+    @jit(nopython=True, fastmath = True)
+    def bordes(r):
+        for i in range(NP):
+            for j in range(NP):
+                for k in range(NP):
+                    r[i, j, k] = np.sqrt(((i-NP/2)*H)**2 + ((j-NP/2)*H)**2 + ((k-NP/2)*H)**2)
+        return r
+    R = bordes(R0)
+    
+    PHI0 = np.zeros((NP, NP, NP)) 
+    #PLANOS DE CONDICIONES DE FRONTERA
+    PHI0[:, :, 0] = -G*M_TOTAL/(R[:, :, 0])
+    PHI0[:, :, NP-1] = -G*M_TOTAL/(R[:, :, NP-1])
+    PHI0[:, 0, :] = -G*M_TOTAL/(R[:, 0, :])
+    PHI0[:, NP-1, :] = -G*M_TOTAL/(R[:, NP-1, :])
+    PHI0[0, :, :] = -G*M_TOTAL/(R[0, :, :])
+    PHI0[NP-1, :, :] = -G*M_TOTAL/(R[NP-1, :, :])
+    
+    
+    r_list_0, v_list_0, f_list_0 = cond_inicial(LIM, K_VEL, EPS, DARK, NP, H, PHI0)
 
-print('El programa ha tardado: ', (tf-t0)/60, 'minutos en completar las trayectorias.')
-trayectorias3D = trayectorias.reshape(trayectorias.shape[0], -1) 
-velocidades3D = velocidades.reshape(velocidades.shape[0], -1) 
+    t0 = time.time()
 
-np.savetxt('trayectorias.dat', trayectorias3D, fmt = '%.3e') #fmt es cuantas cifras decimales
-np.savetxt('trayectoria_CM.dat', trayectoria_CM, fmt = '%.3e') #fmt es cuantas cifras decimales
-np.savetxt('velocidades.dat', velocidades3D, fmt = '%.3e') #fmt es cuantas cifras decimales
+    trayectorias, trayectoria_CM, velocidades = tiempo(r_list_0, v_list_0, f_list_0, TIME_STEPS, 
+                                                       N_R, N_V, DIV_R, DIV_V, DT, EPS, DARK, LIM,
+                                                       NP, H, PHI0)  
+    tf = time.time()
+
+    print('El programa ha tardado: ', ((tf-t0)/60), 'minutos en completar las trayectorias.')
+    trayectorias3D = trayectorias.reshape(trayectorias.shape[0], -1) 
+    velocidades3D = velocidades.reshape(velocidades.shape[0], -1) 
+
+    np.savetxt('trayectorias.dat', trayectorias3D, fmt = '%.3e') #fmt es cuantas cifras decimales
+    np.savetxt('trayectoria_CM.dat', trayectoria_CM, fmt = '%.3e') #fmt es cuantas cifras decimales
+    np.savetxt('velocidades.dat', velocidades3D, fmt = '%.3e') #fmt es cuantas cifras decimales
+
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(description="FB")
+
+    parser.add_argument(
+        "--lim",
+        type=float,
+        default=100.0,
+        help="en kpc.",
+    )
+    parser.add_argument(
+        "--time_step",
+        type=int,
+        default=40000,
+        help="timesteps.",
+    )
+    parser.add_argument(
+        "--div_r",
+        type=int,
+        default=100,
+        help="divr.",
+    )
+    parser.add_argument(
+        "--div_v",
+        type=int,
+        default=100,
+        help="divv.",
+    )
+    parser.add_argument(
+        "--dmin",
+        type=float,
+        default=0.05,
+        help="dmin.",
+    )
+    parser.add_argument(
+        "--k_vel",
+        type=float,
+        default=1.0,
+        help="kvel.",
+    )
+    parser.add_argument(
+        "--dark",
+        type=bool,
+        default=True,
+        help="dark_matter.",
+    )
+    parser.add_argument(
+        "--Nc",
+        type=int,
+        default=100,
+        help="x_cells.",
+    )
+   
+    args = parser.parse_args()
+    main(args)
+
+
 
 

@@ -12,35 +12,38 @@ from scipy.optimize import curve_fit
 from sklearn.metrics import r2_score
 from scipy.interpolate import *
 
-"""""""""""""""
-Parámetros físicos
+sim_parameters = np.loadtxt('parameters.dat')
 
-"""""""""""""""
+##############################################
+######### PARÁMETROS FÍSICOS  ################
+##############################################
+N = int(sim_parameters[0]) #Número de partículas
+N_b = int(0.14 * N) #el 14% de la materia ordinaria es del bulbo
+M = 3245*2.325*1e7 #masa total de las particulas q van a interactuar
+m = M / N #masa de las particulas en Msolares
+G = 4.518 * 1e-12 #constante de gravitación universal en Kpc, Msolares y Millones de años
+##############################################
+##############################################
 
-N = 200000 #Número de partículas
+##############################################
+######### PARÁMETROS DE SIMULACION ################
+##############################################
+salt = 1
 
-T_sol = 225 #periodo del Sol alrededor de la galaxia
+lim = sim_parameters[1]
 
-G = 4.518 * 1e-12#en km²/kg*s²
-
-M = 1e11 #en kg
-
-"""""""""""""""
-Parámetros de simulación
-
-"""""""""""""""
-n = 40000 #número de pasos totales de tiempo
-div_r = 100
-div_v = 100
+n = int(sim_parameters[2])
+div_r = int(sim_parameters[3])
+div_v = int(sim_parameters[4])
 n_r = int(n / div_r) #numero de pasos de tiempo guardados para r
 n_v = int(n / div_v) #numero de pasos de tiempo guardados para v
 n_graf = 5
 
-lim = 100 #en kpc
+dt = sim_parameters[5]
 
-x_lim, y_lim, z_lim = lim, lim, lim
+Np = 100
 
-dt = (T_sol / 2000) #intervalo de tiempo entre cada paso
+h = lim/Np
 
 tray = np.loadtxt('trayectorias.dat', dtype = float)
 tray_3D = tray.reshape(n_r, N, 3)
@@ -48,9 +51,12 @@ tray_3D = tray.reshape(n_r, N, 3)
 vels = np.loadtxt('velocidades.dat', dtype = float)
 vels_3D = vels.reshape(n_v, N, 3)
 
+tray_CM = np.loadtxt('trayectoria_CM.dat', dtype = float)
+R_CM = tray_CM.reshape(n_r,3)
+
 
 #ESTO ES PARA LAS REPRESENTACIONES DE LAS CURVAS DE VELOCIDAD
-R_lim =  np.sqrt((x_lim/2)**2 + (y_lim/2)**2)
+R_lim =  np.sqrt((lim/2)**2 + (lim/2)**2)
 Rs = np.linspace(0.001, R_lim, 200) 
 
 def empty_list_of_lists(N):
@@ -69,8 +75,6 @@ fit_info = np.empty((n_graf, 2*len(guess) + 2))
 
 
 for k in range(n_graf):
-    
-
     #PARA REPRESENTAR
     X = []
     Y = []
@@ -80,7 +84,7 @@ for k in range(n_graf):
     V_RAD = []
     k_r = int(n_r/n_graf)*k
     k_v = int(n_v/n_graf)*k
-    for i in range(N):    
+    for i in range(N_b, N):    
                 
         v = np.linalg.norm(vels_3D[k_v, i, :])
 
@@ -92,13 +96,13 @@ for k in range(n_graf):
         #velocidad radial y velocidad angular
         #########################################
 
-        theta_g = np.arctan((tray_3D[k_r, i, 1] - y_lim/2) / (tray_3D[k_r, i, 0] - x_lim/2))  
+        theta_g = np.arctan((tray_3D[k_r, i, 1] - R_CM[k_r, 1]) / (tray_3D[k_r, i, 0] - R_CM[k_r, 0]))  
    
         ###################################
         #arreglo a la función arctan, para que se ajuste a nuestras necesidades
         ###################################
                 
-        if (tray_3D[k_r, i, 1]  - y_lim/2) < 0 or (tray_3D[k_r, i, 0] - x_lim/2) < 0:
+        if (tray_3D[k_r, i, 1]  - R_CM[k_r, 1]) < 0 or (tray_3D[k_r, i, 0] - R_CM[k_r, 0]) < 0:
                     
             theta_g = np.pi + theta_g
                     
@@ -113,9 +117,9 @@ for k in range(n_graf):
         #PARA REPRESENTAR EN GRÁFICAS
         ###################################
         ###################################
-        X.append(tray_3D[k_r, i, 0]  - x_lim/2)
-        Y.append(tray_3D[k_r, i, 1]  - y_lim/2)
-        Z.append(tray_3D[k_r, i, 2]  - z_lim/2)
+        X.append(tray_3D[k_r, i, 0]  - R_CM[k_r, 0])
+        Y.append(tray_3D[k_r, i, 1]  - R_CM[k_r, 1])
+        Z.append(tray_3D[k_r, i, 2]  - R_CM[k_r, 2])
                    
         V.append(v/(1.022*1e-3)) #pasamos a km/s
         V_ANG.append(v_ang/(1.022*1e-3))
@@ -144,7 +148,7 @@ for k in range(n_graf):
     
     sigma_ANG = empty_list_of_lists(len(Rs))
     
-    for i in range(N):
+    for i in range(N-N_b):
                     
         Ri = np.sqrt(X[i]**2 + Y[i]**2) 
                     
@@ -261,7 +265,7 @@ for k in range(n_graf):
     plt.ylabel('v_ang (km/s)')
     plt.ylabel('v (km/s)')
     plt.ylim(0, 400)
-    plt.xlim(0, x_lim/2)
+    plt.xlim(0, lim/2)
     plt.savefig('Curva de velocidad tangencial paso {}.png'.format(k))
     plt.legend()
     plt.show()
