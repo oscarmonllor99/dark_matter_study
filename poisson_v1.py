@@ -126,19 +126,60 @@ def gradiente(phi, h, lim):
 
 def cond_inicial(lim, k_vel, eps, dark, Np, h, phi0):
 
+    #Montecarlo para obtener las densidades iniciales
+    ###################################################
+    ###################################################
+    @jit(fastmath = True, nopython = True)
+    def bulge(r):
+        b = 0.267
+        return  1/(r**2 + b**2)**(5/2)
+    
+    max_bulge = bulge(0)
+    
+    @jit(fastmath = True, nopython = True)
+    def MN(R, z):
+        a = 4.4
+        b = 0.308
+        return ( (a*R**2 + (a + 3*(z**2 + b**2)**(1/2))*(a + (z**2+b**2)**(1/2))**2 ) 
+                / (( R**2 + (a + (z**2 + b**2)**(1/2))**2)**(5/2) * (z**2 + b**2)**(3/2)) )
+    
+    max_disk = MN(0, 0)
+    
+    @jit(fastmath = True, nopython = True)
+    def get_random_bulge(max_bulge):
+        R = random.uniform(0,3)
+        y = random.uniform(0, max_bulge)
+        while y > bulge(R):
+            R = random.uniform(0,3)
+            y = random.uniform(0, max_bulge)
+        return R
+    
+    @jit(fastmath = True, nopython = True)
+    def get_random_disk(max_disk):
+        R = random.uniform(0, 50)
+        z = random.uniform(-2, 2)
+        y = random.uniform(0, max_disk)
+        while y > MN(R,z):
+            R = random.uniform(0, 50)
+            z = random.uniform(-2, 2)
+            y = random.uniform(0, max_disk)
+        return R,z
+    ###################################################
+    ###################################################
+    
     r_list_0 = np.zeros((NUM_PARTICLES, 3), dtype = float)
     r_esf_tot = np.zeros((NUM_PARTICLES, 3), dtype = float)
     E_rot = 0
     E_pot = 0
-    
+
     for i in range(NUM_PARTICLES):
              
             if i < NUM_PARTICLES_BULGE:
-                
-                R = random.uniform(0.1, 3)
+
+                R = get_random_bulge(max_bulge)
                 while R>49:
-                    R = random.uniform(0.1, 3)
-                
+                    R = get_random_bulge(max_bulge)
+                    
                 theta = random.uniform(0, np.pi)
                 phi = random.uniform(0, 2*np.pi)
                 
@@ -151,13 +192,12 @@ def cond_inicial(lim, k_vel, eps, dark, Np, h, phi0):
                 
                 
             else:
-                
-                R = 10*random.expovariate(1)
-                while R>49:
-                    R = 10*random.expovariate(1)
+        
+                R, z = get_random_disk(max_disk)
+                while R>49 or z>49:
+                    R, z = get_random_disk(max_disk)
                     
                 phi = random.uniform(0, 2*np.pi) 
-                z = random.uniform(-0.5, 0.5)
                 
                 r_esf = [R, phi, z]
                 r_esf_tot[i] = r_esf 

@@ -66,10 +66,10 @@ def empty_list_of_lists(N):
     return lista
 
 
-guess = np.array([120, -1, 0.1])
-def c(r, a, b, c):
+guess = np.array([462, -1])
+def c(r, a, b):
     #f_conv = 978.5
-    return (a + b*r + c*r**2)
+    return (a*r**(b))
 
 fit_info = np.empty((n_graf, 2*len(guess) + 2))
 
@@ -215,15 +215,15 @@ for k in range(n_graf):
     v_tan_data = np.array(v_tan_data)
     sigma_data = np.array(sigma_data)
     
-    corte = int(len(Rs)/5)
+    corte = int(len(Rs)/30)
     param, cov = curve_fit(c, r_data[corte:-1], v_tan_data[corte:-1], guess, sigma = None, absolute_sigma = True)    
-    c_fit = c(r_data[corte:-1], param[0], param[1], param[2]) #curve fit 
+    c_fit = c(r_data[corte:-1], param[0], param[1]) #curve fit 
     R2 = r2_score(c_fit, v_tan_data[corte:-1])
     err = np.sqrt(np.diag(cov)) 
     #Si las componentes de cov no diagonales son del orden o mayores 
     #que las diagonales el modelo está mal
     print("######################################")
-    print("a + br + cr²: ", param)
+    print("a + r^b: ", param)
     print("R² =", R2,", paso", k)
     print("Standard Deviation of fitted param =", err)
     print("Covariance =", cov-np.diag(cov))
@@ -234,10 +234,8 @@ for k in range(n_graf):
     fit_info[k, 1] = err[0]
     fit_info[k, 2] = param[1]
     fit_info[k, 3] = err[1]
-    fit_info[k, 4] = param[2]
-    fit_info[k, 5] = err[2]
-    fit_info[k, 6] = R2
-    fit_info[k, 7] = k
+    fit_info[k, 4] = R2
+    fit_info[k, 5] = k
     np.savetxt('fit_info.txt', fit_info, fmt = '%.2e')
     ######################################################     
     ######################################################
@@ -258,7 +256,7 @@ for k in range(n_graf):
     fig2, ax2 = plt.subplots()
     plt.errorbar(r_data, v_tan_data, sigma_data, fmt='b.')
     
-    ax2.scatter(Rs, V_ANG_med, color = 'blue', s = 0.5, marker = '*', label = "$v_circ$")
+    ax2.scatter(Rs, V_ANG_med, color = 'blue', s = 0.5, marker = '*', label = "$v_c$")
     plt.plot(r_data[corte:-1], c_fit, color = 'black', label = "$v(r) = a + b·r + c·r^2$")
     plt.title('Curva de velocidad circular para el paso {}'.format(k))
     plt.xlabel('R (kpc)')
@@ -280,7 +278,5 @@ for k in range(n_graf):
     plt.savefig('Curva de velocidad radial paso {}.png'.format(k))
     plt.show()
     """
-
-
 
 

@@ -54,32 +54,71 @@ R0 = bordes(R0)
 ##############################################
 r_list_0 = np.zeros((NUM_PARTICLES, 3), dtype = float)
     
+    #Montecarlo para obtener las densidades iniciales
+    ###################################################
+    ###################################################
+@jit(fastmath = True, nopython = True)
+def bulge(r):
+        b = 0.267
+        return  1/(r**2 + b**2)**(5/2)
+    
+max_bulge = bulge(0)
+    
+@jit(fastmath = True, nopython = True)
+def MN(R, z):
+        a = 4.4
+        b = 0.308
+        return ( (a*R**2 + (a + 3*(z**2 + b**2)**(1/2))*(a + (z**2+b**2)**(1/2))**2 ) 
+                / (( R**2 + (a + (z**2 + b**2)**(1/2))**2)**(5/2) * (z**2 + b**2)**(3/2)) )
+    
+max_disk = MN(0, 0)
+    
+@jit(fastmath = True, nopython = True)
+def get_random_bulge(max_bulge):
+        R = random.uniform(0,3)
+        y = random.uniform(0, max_bulge)
+        while y > bulge(R):
+            R = random.uniform(0,3)
+            y = random.uniform(0, max_bulge)
+        return R
+    
+@jit(fastmath = True, nopython = True)
+def get_random_disk(max_disk):
+        R = random.uniform(0, 50)
+        z = random.uniform(-2, 2)
+        y = random.uniform(0, max_disk)
+        while y > MN(R,z):
+            R = random.uniform(0, 50)
+            z = random.uniform(-2, 2)
+            y = random.uniform(0, max_disk)
+        return R,z
+    ###################################################
+    ###################################################
+r_list_0 = np.zeros((NUM_PARTICLES, 3), dtype = float)
+
 for i in range(NUM_PARTICLES):
              
             if i < NUM_PARTICLES_BULGE:
-                
-                R = random.uniform(0.1, 3)
+
+                R = get_random_bulge(max_bulge)
                 while R>49:
-                    R = random.uniform(0.1, 3)
-                
+                    R = get_random_bulge(max_bulge)
+                    
                 theta = random.uniform(0, np.pi)
                 phi = random.uniform(0, 2*np.pi)
-
                 
                 r_list_0[i, 0] = lim/2 + R*np.cos(phi)*np.sin(theta)
                 r_list_0[i, 1] = lim/2 + R*np.sin(phi)*np.sin(theta)
                 r_list_0[i, 2] = lim/2 + R*np.cos(theta)
-                
-                
+
             else:
-                
-                R = 10*random.expovariate(1)
-                while R>49:
-                    R = 10*random.expovariate(1)
+        
+                R, z = get_random_disk(max_disk)
+                while R>49 or z>49:
+                    R, z = get_random_disk(max_disk)
                     
                 phi = random.uniform(0, 2*np.pi) 
-                z = random.uniform(-0.5, 0.5)
-
+                
                 r_list_0[i, 0] = lim/2 + R*np.cos(phi)
                 r_list_0[i, 1] = lim/2 + R*np.sin(phi)
                 r_list_0[i, 2] = lim/2 + z
@@ -109,6 +148,10 @@ RHO0 = densidad(r_list_0, NP, H)
 
 plt.figure()
 plt.imshow(RHO0[:,:,int(NP/2)] + 0.01, norm=colors.LogNorm())
+plt.show()
+
+plt.figure()
+plt.imshow(np.transpose(RHO0[int(NP/2),:,:]) + 0.01, norm=colors.LogNorm())
 plt.show()
 
 PHI0 = np.zeros((NP, NP, NP)) 
