@@ -18,7 +18,8 @@ sim_parameters = np.loadtxt('parameters.dat')
 ######### PARÁMETROS FÍSICOS  ################
 ##############################################
 N = int(sim_parameters[0]) #Número de partículas
-N_b = int(0.14 * N) #el 14% de la materia ordinaria es del bulbo
+Nb = int(0.14 * N) #el 14% de la materia ordinaria es del bulbo
+Nd = N-Nb
 M = 3245*2.325*1e7 #masa total de las particulas q van a interactuar
 m = M / N #masa de las particulas en Msolares
 G = 4.518 * 1e-12 #constante de gravitación universal en Kpc, Msolares y Millones de años
@@ -28,8 +29,6 @@ G = 4.518 * 1e-12 #constante de gravitación universal en Kpc, Msolares y Millon
 ##############################################
 ######### PARÁMETROS DE SIMULACION ################
 ##############################################
-salt = 1
-
 lim = sim_parameters[1]
 
 n = int(sim_parameters[2])
@@ -52,8 +51,7 @@ vels = np.loadtxt('velocidades.dat', dtype = float)
 vels_3D = vels.reshape(n_v, N, 3)
 
 tray_CM = np.loadtxt('trayectoria_CM.dat', dtype = float)
-R_CM = tray_CM.reshape(n_r,3)
-
+R_CM = tray_CM.reshape(n_r, 3)
 
 #ESTO ES PARA LAS REPRESENTACIONES DE LAS CURVAS DE VELOCIDAD
 R_lim =  np.sqrt((lim/2)**2 + (lim/2)**2)
@@ -84,20 +82,20 @@ for k in range(n_graf):
     V_RAD = []
     k_r = int(n_r/n_graf)*k
     k_v = int(n_v/n_graf)*k
-    for i in range(N_b, N):    
+    for i in range(Nd, N):    
                 
         v = np.linalg.norm(vels_3D[k_v, i, :])
 
         vx = vels_3D[k_v, i, 0]
         vy = vels_3D[k_v, i, 1]
         vz = vels_3D[k_v, i, 2]
-
+        
         ##########################################
         #velocidad radial y velocidad angular
         #########################################
-
-        theta_g = np.arctan((tray_3D[k_r, i, 1] - R_CM[k_r, 1]) / (tray_3D[k_r, i, 0] - R_CM[k_r, 0]))  
-   
+        
+        theta_g = np.arctan((tray_3D[k_r, i, 1] - R_CM[k_r, 1]) / (tray_3D[k_r, i, 0] - R_CM[k_r, 0])) 
+        
         ###################################
         #arreglo a la función arctan, para que se ajuste a nuestras necesidades
         ###################################
@@ -111,7 +109,7 @@ for k in range(n_graf):
      
         v_rad = (vx*np.cos(theta_g) + vy*np.sin(theta_g))
         v_ang = abs(-vx*np.sin(theta_g) + vy*np.cos(theta_g))
-
+        
         ###################################
         ###################################
         #PARA REPRESENTAR EN GRÁFICAS
@@ -148,18 +146,20 @@ for k in range(n_graf):
     
     sigma_ANG = empty_list_of_lists(len(Rs))
     
-    for i in range(N-N_b):
+    for i in range(N-Nd):
                     
         Ri = np.sqrt(X[i]**2 + Y[i]**2) 
                     
         for j in range(len(Rs)):
                         
             if Rs[j-1] <= Ri <= Rs[j]:
-                            
-                V_med[j].append(V[i])
-                V_ANG_med[j].append(V_ANG[i])
-                V_RAD_med[j].append(V_RAD[i])
-                            
+                
+                if abs(V_ANG[i])>0 and abs(V[i])>0 and abs(V_RAD[i])>0:
+                    
+                    V_med[j].append(V[i])
+                    V_ANG_med[j].append(V_ANG[i])
+                    V_RAD_med[j].append(V_RAD[i])
+                    
                 break
                             
             if j == 0:
@@ -181,7 +181,7 @@ for k in range(n_graf):
         if len(V_ANG_med[j]) != 0:
             std = np.std(np.array(V_ANG_med[j]))
             sigma_ANG[j] = std/np.sqrt(len(V_ANG_med[j]))
-            V_ANG_med[j] = sum(V_ANG_med[j])/len(V_ANG_med[j])
+            V_ANG_med[j] = abs(sum(V_ANG_med[j])/len(V_ANG_med[j]))
                         
         else:
                         
@@ -204,7 +204,7 @@ for k in range(n_graf):
     r_data = []
     sigma_data = []
     for u in range(len(V_ANG_med)):
-        if V_ANG_med[u] < 0.01: #km/s
+        if V_ANG_med[u] < 25: #km/s
             pass
         else:
             v_tan_data.append(V_ANG_med[u])
@@ -215,7 +215,8 @@ for k in range(n_graf):
     v_tan_data = np.array(v_tan_data)
     sigma_data = np.array(sigma_data)
     
-    corte = int(len(Rs)/30)
+  
+    corte = np.argmax(v_tan_data[0:20])
     param, cov = curve_fit(c, r_data[corte:-1], v_tan_data[corte:-1], guess, sigma = None, absolute_sigma = True)    
     c_fit = c(r_data[corte:-1], param[0], param[1]) #curve fit 
     R2 = r2_score(c_fit, v_tan_data[corte:-1])
@@ -223,7 +224,7 @@ for k in range(n_graf):
     #Si las componentes de cov no diagonales son del orden o mayores 
     #que las diagonales el modelo está mal
     print("######################################")
-    print("a + r^b: ", param)
+    print("a*r^b: ", param)
     print("R² =", R2,", paso", k)
     print("Standard Deviation of fitted param =", err)
     print("Covariance =", cov-np.diag(cov))
@@ -252,20 +253,17 @@ for k in range(n_graf):
     plt.savefig('Curva de módulo velocidad paso {}.png'.format(k))
     plt.show()
     """
-    
     fig2, ax2 = plt.subplots()
-    plt.errorbar(r_data, v_tan_data, sigma_data, fmt='b.')
-    
-    ax2.scatter(Rs, V_ANG_med, color = 'blue', s = 0.5, marker = '*', label = "$v_c$")
-    plt.plot(r_data[corte:-1], c_fit, color = 'black', label = "$v(r) = a + b·r + c·r^2$")
-    plt.title('Curva de velocidad circular para el paso {}'.format(k))
-    plt.xlabel('R (kpc)')
-    plt.ylabel('v_ang (km/s)')
-    plt.ylabel('v (km/s)')
+    plt.errorbar(r_data, v_tan_data, sigma_data, fmt='r.')
+    ax2.scatter(Rs, V_ANG_med, c = 'red', s = 0.5, marker = '*', label = "$v_c$")
+    plt.plot(r_data[corte:-1], c_fit, color = 'black', label = "$v_c (r) = a · r^b$")
+    plt.title('Curva de velocidad circular para {} millones de años'.format(int((k*n/n_graf)*dt)))
+    plt.xlabel('$R (kpc)$')
+    plt.ylabel('$v_c (km/s)$')
     plt.ylim(0, 400)
     plt.xlim(0, lim/2)
-    plt.savefig('Curva de velocidad tangencial paso {}.png'.format(k))
     plt.legend()
+    plt.savefig('Curva de velocidad circular para {} millones de años'.format(int((k*n/n_graf)*dt)))
     plt.show()
     """
     fig3, ax3 = plt.subplots()

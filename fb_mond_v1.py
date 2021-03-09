@@ -13,7 +13,7 @@ import argparse
 ##############################################
 ######### PARÁMETROS FÍSICOS  ################
 ##############################################
-NUM_PARTICLES = 1000 #Número de partículas
+NUM_PARTICLES = 4000 #Número de partículas
 NUM_PARTICLES_BULGE = int(0.14 * NUM_PARTICLES) #el 14% de la materia ordinaria es del bulbo
 M_TOTAL = 3245*2.325*1e7 #masa total de las particulas q van a interactuar
 M_PARTICLE = M_TOTAL / NUM_PARTICLES #masa de las particulas en Msolares
@@ -68,6 +68,12 @@ def ener_pot(i, r_list, sumatorio_E, eps):
 
     return sumatorio_E * (-G)
 
+@jit(nopython = True, fastmath = True, parallel = False)
+def ener_pot_calculator(r_list, eps):
+    ener_list = np.zeros(NUM_PARTICLES)
+    for i in range(NUM_PARTICLES):
+        ener_list[i] = ener_pot(i, r_list, 0.0, eps)  
+    return ener_list
 
 ###########################################################################
 ###########################################################################
@@ -93,8 +99,10 @@ def cond_inicial(lim, k_vel, eps):
     def MN(R, z):
         a = 4.4
         b = 0.308
-        return ( (a*R**2 + (a + 3*(z**2 + b**2)**(1/2))*(a + (z**2+b**2)**(1/2))**2 ) 
-                / (( R**2 + (a + (z**2 + b**2)**(1/2))**2)**(5/2) * (z**2 + b**2)**(3/2)) )
+        return ( (a*R**2 + (a + 3*(z**2 + b**2)**(1/2))
+                  *(a + (z**2+b**2)**(1/2))**2 ) 
+                / (( R**2 + (a + (z**2 + b**2)**(1/2))**2)**(5/2) 
+                   * (z**2 + b**2)**(3/2)) )
     
     max_disk = MN(0, 0)
     
@@ -268,6 +276,7 @@ def tiempo(r_list, v_list, f_list, n, n_r, n_v, div_r, div_v, dt, eps):
     tray = np.empty((n_r, NUM_PARTICLES, 3))
     tray_CM = np.empty((n_r, 3))
     vels = np.empty((n_v, NUM_PARTICLES, 3))
+    eners = np.empty((n_v, NUM_PARTICLES))
 
     for k in range(n):
         #Estos son los indices de paso de tiempo para guardar r y v
@@ -291,8 +300,10 @@ def tiempo(r_list, v_list, f_list, n, n_r, n_v, div_r, div_v, dt, eps):
             k_v = int(k // div_v)
             print((k/n)*100, "%")
             vels[k_v, :, :] = v_list[:, :]
+            ener_list = ener_pot_calculator(r_list, eps)
+            eners[k_v, :] = ener_list[:]
 
-    return tray, tray_CM, vels
+    return tray, tray_CM, vels, eners
 
 ####################################################################################
 ####################################################################################
@@ -312,7 +323,7 @@ def main(args):
     DIV_V = args.div_v
     N_R = int(TIME_STEPS // DIV_R) #numero de pasos de tiempo guardados para r
     N_V = int(TIME_STEPS // DIV_V) #numero de pasos de tiempo guardados para v
-    DT = T_SOL / 2000 #intervalo de tiempo entre cada paso
+    DT = T_SOL / 200 #intervalo de tiempo entre cada paso
     D_MIN = args.dmin #distancia minima a la cual se debe calcular la fuerza en kpc
     EPS = np.sqrt(2*D_MIN / 3**(3/2)) 
     K_VEL= args.k_vel#parámetro de control de momento angular inicial (0--> velocidad angular inicial 0
@@ -325,7 +336,7 @@ def main(args):
     r_list_0, v_list_0, f_list_0 = cond_inicial(LIM, K_VEL, EPS)
 
     t0 = time.time()
-    trayectorias, trayectoria_CM, velocidades = tiempo(r_list_0, v_list_0, f_list_0, TIME_STEPS, N_R, N_V, DIV_R, DIV_V, DT, EPS)
+    trayectorias, trayectoria_CM, velocidades, energia_pot = tiempo(r_list_0, v_list_0, f_list_0, TIME_STEPS, N_R, N_V, DIV_R, DIV_V, DT, EPS)
     tf = time.time()
 
     print('El programa ha tardado: ', ((tf-t0)/60), 'minutos en completar las trayectorias.')
@@ -335,7 +346,7 @@ def main(args):
     np.savetxt('trayectorias.dat', trayectorias3D, fmt = '%.3e') #fmt es cuantas cifras decimales
     np.savetxt('trayectoria_CM.dat', trayectoria_CM, fmt = '%.3e') #fmt es cuantas cifras decimales
     np.savetxt('velocidades.dat', velocidades3D, fmt = '%.3e') #fmt es cuantas cifras decimales
-
+    np.savetxt('energia_pot.dat', energia_pot, fmt = '%.3e')
 
 if __name__ == "__main__":
 
@@ -350,25 +361,25 @@ if __name__ == "__main__":
     parser.add_argument(
         "--time_step",
         type=int,
-        default=40000,
+        default=2000,
         help="timesteps.",
     )
     parser.add_argument(
         "--div_r",
         type=int,
-        default=100,
+        default=25,
         help="divr.",
     )
     parser.add_argument(
         "--div_v",
         type=int,
-        default=100,
+        default=25,
         help="divv.",
     )
     parser.add_argument(
         "--dmin",
         type=float,
-        default=0.05,
+        default=1,
         help="dmin.",
     )
     parser.add_argument(

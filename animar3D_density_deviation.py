@@ -60,10 +60,8 @@ tray_CM = np.loadtxt('trayectoria_CM.dat', dtype = float)
 R_CM = tray_CM.reshape(n,3)
 
 #creamos la figura
-fig, (ax1, ax2) = plt.subplots(1, 2)
-fig.tight_layout()
-ax1.set_xlabel('Above')
-ax2.set_xlabel('Side')
+fig, ax1 = plt.subplots()
+ax1.set_xlabel('XY')
 
 
 #posiciones iniciales de las partículas
@@ -71,7 +69,7 @@ ax2.set_xlabel('Side')
 @jit(nopython=True, fastmath = True)
 def densidad(r_list_0):
     rho = np.ones((Np + 1, Np + 1))
-    for i in range(Nd, N):
+    for i in range(Nd,N):
         x_pos = int(r_list_0[i,0] / h)
         y_pos = int(r_list_0[i,1] / h)
         
@@ -85,62 +83,37 @@ def densidad(r_list_0):
 
     return rho
 
-@jit(nopython=True, fastmath = True)
-def densidad_z(r_list_0):
-    rho = np.ones((Np + 1, Np+ 1))
-    for i in range(Nd, N):
-        y_pos = int(r_list_0[i,1] / h)
-        z_pos = int(r_list_0[i,2] / h)
-        
-        if y_pos <= 0 or y_pos >= Np or z_pos <= 0 or z_pos >= Np:
-            
-            pass
-        
-        else:
-            rho[z_pos+1, y_pos+1] += m / h**2
-    return rho
-
-
 x = np.arange(0, lim + h, h)
 y = np.arange(0, lim + h, h)
 z = np.arange(0, lim + h, h)
 
 X, Y = np.meshgrid(x,y)
-Y_z, Z_z = np.meshgrid(y, z)
 
 @jit(nopython=True, fastmath = True)
 def iterator_rho(rho):
     for k in range(n):
-        rho[k, :, :] = densidad(tray_3D[k, :, :])
+        if k == 0:
+            rho[k, :, :] = densidad(tray_3D[k, :, :])
+        else:
+            rho[k, :, :] = (densidad(tray_3D[k, :, :]) - rho[0, :, :])
     return rho
 
-@jit(nopython=True, fastmath = True)
-def iterator_rho_z(rho_z):
-    for k in range(n):
-        rho_z[k, :, :] = densidad_z(tray_3D[k, :, :])
-    return rho_z
-
 rho = iterator_rho(np.empty((n, Np+1, Np+1)))
-rho_z = iterator_rho_z(np.empty((n, Np+1, Np+1)))
+
+im1 = ax1.imshow(rho[1,:,:], cmap = 'seismic', interpolation = 'gaussian', norm=colors.DivergingNorm(vmin=np.min(rho[1]), vcenter=0., vmax=np.max(rho[1])))
+scatter_CM1 = ax1.scatter(R_CM[0,0], R_CM[0,1], c = 'black', s=1000000, 
+                          marker = '+', linewidths=1, alpha = 0.5)
 
 
-im1 = ax1.imshow(rho[0,:,:], cmap = 'nipy_spectral', norm=colors.PowerNorm(gamma=0.5), interpolation = 'gaussian')
-scatter_CM1 = ax1.scatter(R_CM[0,0], R_CM[0,1], c = 'white', s=1000000, 
-                          marker = '+', linewidths=1, alpha = 0.2)
-im2 = ax2.imshow(rho_z[0,:,:], cmap = 'nipy_spectral', norm=colors.PowerNorm(gamma=0.5), interpolation = 'gaussian')
-scatter_CM2 = ax2.scatter(R_CM[0,1], R_CM[0,2], c = 'white', s=1000000, 
-                          marker = '+', linewidths=1, alpha = 0.2)
 txt = fig.suptitle('{:d} millones de años'.format(int(0*div_r*dt)))
 colorbar = fig.colorbar(im1, fraction = 0.15)
-colorbar.ax.set_xlabel('$M_0$')
+colorbar.ax.set_xlabel('Dev.D')
 
 def animation_frame(k):
-        
+    
     txt.set_text('{:d} millones de años'.format(int(k*div_r*dt)))
     scatter_CM1.set_offsets([R_CM[k,0], R_CM[k,1]])
-    im1.set_array(rho[k,:,:])
-    scatter_CM2.set_offsets([R_CM[k,1], R_CM[k,2]])
-    im2.set_array(rho_z[k,:,:])
+    im1.set_array(rho[k,:,:] + 0.1)
     
     return txt
             
@@ -153,5 +126,5 @@ if save:
         # Set up formatting for the movie files
         Writer = animation.writers['ffmpeg']
         writer = Writer(fps=5, metadata=dict(artist='Me'), bitrate=1800)
-        movimiento.save('movimiento_surface.mp4', writer=writer)
+        movimiento.save('density_deviation.mp4', writer=writer)
 

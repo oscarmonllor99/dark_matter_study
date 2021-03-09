@@ -13,7 +13,7 @@ from matplotlib import colors
 ##############################################
 ######### PARÁMETROS FÍSICOS  ################
 ##############################################
-NUM_PARTICLES = 200000 #Número de partículas
+NUM_PARTICLES = 100000 #Número de partículas
 NUM_PARTICLES_BULGE = int(0.14 * NUM_PARTICLES) #el 14% de la materia ordinaria es del bulbo
 M_TOTAL = 3245*2.325*1e7 #masa total de las particulas q van a interactuar
 M_PARTICLE = M_TOTAL / NUM_PARTICLES #masa de las particulas en Msolares
@@ -123,24 +123,33 @@ for i in range(NUM_PARTICLES):
                 r_list_0[i, 1] = lim/2 + R*np.sin(phi)
                 r_list_0[i, 2] = lim/2 + z
 
+@jit(nopython=True, fastmath = True, parallel = False)
+def sign(x):
+    if x >= 0.:
+        return 1
+    if x < 0.:
+        return -1
+    return
+    
+    
 
 @jit(nopython=True, fastmath = True, parallel = False)
 def densidad(r_list, Np, h):
     rho = np.zeros((Np, Np, Np))
     for i in range(NUM_PARTICLES):
         
-        x_pos = int(r_list[i,0] / h)
-        y_pos = int(r_list[i,1] / h)
-        z_pos = int(r_list[i,2] / h)
+        x_pos = int(r_list[i,0] // h)
+        y_pos = int(r_list[i,1] // h)
+        z_pos = int(r_list[i,2] // h)
         
-        if x_pos <= 0 or x_pos >= Np or y_pos <= 0 or y_pos >= Np or z_pos <= 0 or z_pos >= Np:
+        if (x_pos <= 0 or x_pos >= Np or y_pos  <= 0
+        or y_pos  >= Np or z_pos <= 0 or z_pos  >= Np):
             
             pass
         
         else:
-        
-            rho[x_pos, y_pos, z_pos] += M_PARTICLE / h**3
-
+            rho[x_pos, y_pos, z_pos] += M_PARTICLE/h**3
+            
     return rho
 
 
@@ -166,17 +175,28 @@ PHI0[NP-1, :, :] = -G*M_TOTAL/(R0[NP-1, :, :])
 @jit(nopython=True, fastmath = True)
 def poisson(rho, phi, Np, h):
     w = 0.95
-    pasos = 100
-    for u in range(pasos):
+    tol = 1e-4
+    acabar = False
+    iterations = 0
+    while not acabar:
+        max_diff = 0
         for i in range(1, Np-1):
             for j in range(1, Np-1):
                 for k in range(1, Np-1):
+                    phi_0 = phi[i, j, k] 
                     phi[i, j, k] = (1.+w)*(1/6)*(phi[i+1, j, k] + phi[i-1, j, k]
                                          + phi[i, j+1, k] + phi[i, j-1, k]
                                          + phi[i, j, k+1] + phi[i, j, k-1]
                                          - h**2 * 4.*np.pi*G*rho[i, j, k]) - w*phi[i, j, k]
+                    diff = abs(phi_0 - phi[i,j,k])
+                    if diff > max_diff:
+                        max_diff = diff
+        iterations += 1
+        if max_diff < tol:
+            acabar = True
+    print('Number of iterations:', iterations)
     return phi
-  
+
 t0 = time.time()
 phi = poisson(RHO0, PHI0, NP, H)
 tf = time.time()
@@ -185,18 +205,9 @@ print(tf-t0)
 
 fig, ax = plt.subplots()
 cmap = plt.cm.get_cmap("inferno")
-cs = ax.contourf(X, Y, phi[:,:, int(NP/2)], cmap = cmap, levels = 75) #pasamos el potencial a km**2 / s**2
-fig.colorbar(cs)
-plt.show()
-
-pot = (phi[int(NP/2):, int(NP/2), int(NP/2)])
-
-x = np.linspace(H, int(NP/2)*H, int(NP/2))
-
-fig1, ax1 = plt.subplots()
-ax1.plot(x, pot, label='Aproximación')
-ax1.plot(x, -(G*M_TOTAL/(x)), label = 'analítico')
-plt.legend()
+cs = ax.contourf(phi[:,:, int(NP/2)], cmap = cmap, levels = 75) #pasamos el potencial a km**2 / s**2
+colorbar = fig.colorbar(cs)
+colorbar.ax.set_xlabel('$\phi (kpc^2/My^2)$')
 plt.show()
 
     

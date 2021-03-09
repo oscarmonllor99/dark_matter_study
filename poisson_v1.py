@@ -3,6 +3,7 @@ from numba import jit
 import random
 import time
 import argparse
+
 ##############################################
 ######### PARÁMETROS FÍSICOS  ################
 ##############################################
@@ -68,10 +69,18 @@ def fuerza(r_list, g, i, dark, Np, h, lim):
     y_pos =  int(r_list_i[1]/h)
     z_pos =  int(r_list_i[2]/h)
 
-    if x_pos <= 0 or x_pos >= Np or y_pos <= 0 or y_pos >= Np or z_pos <= 0 or z_pos >= Np:
 
-        return np.zeros(3)
+    if x_pos <= 0 or x_pos >= Np-1 or y_pos <= 0 or y_pos >= Np-1 or z_pos <= 0 or z_pos >= Np-1:
 
+        if dark:
+            r_centro = np.array([lim/2, lim/2, lim/2])
+            return ( -G*M_TOTAL*(r_list_i - r_centro)/np.linalg.norm(r_list_i - r_centro)**3 
+                    + f_dark(r_list_i, lim) )
+        else:
+            r_centro = np.array([lim/2, lim/2, lim/2])
+            return -G*M_TOTAL*(r_list[i] - r_centro)/np.linalg.norm(r_list[i] - r_centro)**3 
+        
+        
     else:
 
         if dark:
@@ -84,11 +93,12 @@ def densidad(r_list, Np, h):
     rho = np.zeros((Np, Np, Np))
     for i in range(NUM_PARTICLES):
         
-        x_pos = int(r_list[i,0] / h)
-        y_pos = int(r_list[i,1] / h)
-        z_pos = int(r_list[i,2] / h)
+        x_pos = int(r_list[i,0] // h)
+        y_pos = int(r_list[i,1] // h)
+        z_pos = int(r_list[i,2] // h)
         
-        if x_pos <= 0 or x_pos >= Np or y_pos <= 0 or y_pos >= Np or z_pos <= 0 or z_pos >= Np:
+        if (x_pos <= 0 or x_pos >= Np-1 or y_pos <= 0 or y_pos >= Np-1 or 
+        z_pos <= 0 or z_pos >= Np-1):
             
             pass
         
@@ -101,26 +111,68 @@ def densidad(r_list, Np, h):
 @jit(nopython=True, fastmath = True)
 def poisson(rho, phi, Np, h):
     w = 0.95
-    pasos = 100
-    for u in range(pasos):
+    tol = 1e-4
+    acabar = False
+    while not acabar:
+        max_diff = 0
         for i in range(1, Np-1):
             for j in range(1, Np-1):
                 for k in range(1, Np-1):
+                    phi_0 = phi[i, j, k] 
                     phi[i, j, k] = (1.+w)*(1/6)*(phi[i+1, j, k] + phi[i-1, j, k]
                                          + phi[i, j+1, k] + phi[i, j-1, k]
                                          + phi[i, j, k+1] + phi[i, j, k-1]
                                          - h**2 * 4.*np.pi*G*rho[i, j, k]) - w*phi[i, j, k]
+                    diff = abs(phi_0 - phi[i,j,k])
+                    if diff > max_diff:
+                        max_diff = diff
+        if max_diff < tol:
+            acabar = True
     return phi
 
-def gradiente(phi, h, lim):
+@jit(nopython=True, fastmath = True)
+def gradiente(phi, Np, h):
+    g = np.zeros((3, Np, Np, Np))
+    for i in range(1, Np-1):
+        for j in range(1, Np-1):
+            for k in range(1, Np-1):
+                g[0,i,j,k] = - (phi[i+1, j, k] - phi[i-1, j, k])/(2*h)
+                g[1,i,j,k] = - (phi[i, j+1, k] - phi[i, j-1, k])/(2*h)
+                g[2,i,j,k] = - (phi[i, j, k+1] - phi[i, j, k-1])/(2*h)
+    return g
     
-    x = np.arange(0, lim, h) 
-    y = np.arange(0, lim, h)
-    z = np.arange(0, lim, h)
-    
-    g = np.array(np.gradient(phi, x, y, z))
-    #El array es del tipo g[componente][NpuntosX][NpuntosY][NpuntosZ]
-    return -g
+@jit(nopython = True, fastmath = True, parallel = False)
+def ener_pot_calculator(r_list, phi, dark, lim, Np, h):
+    ener_list = np.zeros(NUM_PARTICLES)
+    for i in range(NUM_PARTICLES):
+        
+        x_pos = int(r_list[i,0] // h)
+        y_pos = int(r_list[i,1] // h)
+        z_pos = int(r_list[i,2] // h)
+        
+        if (x_pos <= 0 or x_pos >= Np-1 or y_pos <= 0 or y_pos >= Np-1 or 
+        z_pos <= 0 or z_pos >= Np-1):
+            
+            if dark:
+                r_centro = np.array([lim/2, lim/2, lim/2])
+                ener_list[i] = (-G*M_PARTICLE*M_TOTAL/np.linalg.norm(r_list[i]-r_centro) 
+                                + M_PARTICLE*pot_dark(r_list[i], lim))
+            else:
+                r_centro = np.array([lim/2, lim/2, lim/2])
+                ener_list[i] = -G*M_PARTICLE*M_TOTAL/np.linalg.norm(r_list[i]-r_centro)
+        
+        else:
+
+            if dark:
+                
+                ener_list[i] = (M_PARTICLE*phi[x_pos, y_pos, z_pos] 
+                                + M_PARTICLE*pot_dark(r_list[i], lim))
+            else:
+                
+                ener_list[i] = M_PARTICLE*phi[x_pos, y_pos, z_pos]
+                
+    return ener_list
+
 ###########################################################################
 ###########################################################################
 
@@ -208,9 +260,8 @@ def cond_inicial(lim, k_vel, eps, dark, Np, h, phi0):
 
             
     rho = densidad(r_list_0, Np, h)
-    
     phi = poisson(rho, phi0, Np, h)
-    g = gradiente(phi, h, lim)
+    g = gradiente(phi, Np, h)
 
     v_list_0 = np.zeros((NUM_PARTICLES, 3), dtype = float)
     
@@ -254,7 +305,7 @@ def cond_inicial(lim, k_vel, eps, dark, Np, h, phi0):
         if i < NUM_PARTICLES_BULGE:
                 
                 theta_g = r_esf_tot[i, 2]    
-                v_r = random.uniform(-0.1*v_esc, 0.1*v_esc)   
+                v_r = random.uniform(-0.3*v_esc, 0.3*v_esc)   
                 v_z = v_circ*np.cos(theta_g)
                 v_tan = v_circ*np.sin(theta_g)
                 
@@ -265,7 +316,7 @@ def cond_inicial(lim, k_vel, eps, dark, Np, h, phi0):
         else:
                 
                 v_tan = v_circ
-                v_R = random.uniform(-0.1*v_esc, 0.1*v_esc)   
+                v_R = random.uniform(-0.3*v_esc, 0.3*v_esc)   
                 v_z = random.uniform(-0.01*v_esc, 0.01*v_esc)
                 
                 v_list_0[i, 0] = (-v_tan * np.sin(phi_g) + v_R * np.cos(phi_g))
@@ -308,13 +359,13 @@ def paso(r_list, v_list, f_list, dt, eps, dark, lim,
  
     rho = densidad(r_list_new, Np, h)
     phi = poisson(rho, phi0, Np, h)
-    g = gradiente(phi, h, lim)
+    g = gradiente(phi, Np, h)
     
     f_list_new = force_update(r_list_new, g, dark, Np, h, lim)
 
     v_list_new = v_list + 0.5*dt*(f_list_new + f_list)
 
-    return r_list_new, v_list_new, f_list_new
+    return r_list_new, v_list_new, f_list_new, phi
 
 #################################################################
 #################################################################
@@ -338,7 +389,8 @@ def tiempo(r_list, v_list, f_list, n, n_r,
     tray = np.empty((n_r, NUM_PARTICLES, 3))
     tray_CM = np.empty((n_r, 3))
     vels = np.empty((n_v, NUM_PARTICLES, 3))
-
+    eners = np.empty((n_v, NUM_PARTICLES))
+    
     for k in range(n):
         #Estos son los indices de paso de tiempo para guardar r y v
 
@@ -346,12 +398,12 @@ def tiempo(r_list, v_list, f_list, n, n_r,
         
         if k == 1:
             t0 = time.time()
-            r_list, v_list, f_list = paso(r_list, v_list, f_list, dt, eps, dark, lim,
+            r_list, v_list, f_list, phi = paso(r_list, v_list, f_list, dt, eps, dark, lim,
                                           Np, h, phi0)
             tf = time.time()
             print("El programa va a tardar:", int(n*(tf-t0)/60),"minutos")
         else:
-            r_list, v_list, f_list= paso(r_list, v_list, f_list, dt, eps, dark, lim,
+            r_list, v_list, f_list, phi = paso(r_list, v_list, f_list, dt, eps, dark, lim,
                                          Np, h, phi0)
             
         if k%div_r == 0.0:
@@ -363,8 +415,10 @@ def tiempo(r_list, v_list, f_list, n, n_r,
             k_v = int(k // div_v)
             print((k/n)*100, "%")
             vels[k_v, :, :] = v_list[:, :]
-
-    return tray, tray_CM, vels
+            ener_list = ener_pot_calculator(r_list, phi, dark, lim, Np, h)
+            eners[k_v, :] = ener_list[:]
+            
+    return tray, tray_CM, vels, eners
       
 ####################################################################################
 ####################################################################################
@@ -385,7 +439,7 @@ def main(args):
     DIV_V = args.div_v
     N_R = int(TIME_STEPS // DIV_R) #numero de pasos de tiempo guardados para r
     N_V = int(TIME_STEPS // DIV_V) #numero de pasos de tiempo guardados para v
-    DT = T_SOL / 2000 #intervalo de tiempo entre cada paso
+    DT = T_SOL / 100 #intervalo de tiempo entre cada paso
     D_MIN = args.dmin #distancia minima a la cual se debe calcular la fuerza en kpc
     EPS = np.sqrt(2*D_MIN / 3**(3/2)) 
     K_VEL= args.k_vel#parámetro de control de momento angular inicial (0--> velocidad angular inicial 0
@@ -423,7 +477,7 @@ def main(args):
 
     t0 = time.time()
 
-    trayectorias, trayectoria_CM, velocidades = tiempo(r_list_0, v_list_0, f_list_0, TIME_STEPS, 
+    trayectorias, trayectoria_CM, velocidades, energia_pot = tiempo(r_list_0, v_list_0, f_list_0, TIME_STEPS, 
                                                        N_R, N_V, DIV_R, DIV_V, DT, EPS, DARK, LIM,
                                                        NP, H, PHI0)  
     tf = time.time()
@@ -433,9 +487,9 @@ def main(args):
     velocidades3D = velocidades.reshape(velocidades.shape[0], -1) 
 
     np.savetxt('trayectorias.dat', trayectorias3D, fmt = '%.3e') #fmt es cuantas cifras decimales
-    np.savetxt('trayectoria_CM.dat', trayectoria_CM, fmt = '%.3e') #fmt es cuantas cifras decimales
-    np.savetxt('velocidades.dat', velocidades3D, fmt = '%.3e') #fmt es cuantas cifras decimales
-
+    np.savetxt('trayectoria_CM.dat', trayectoria_CM, fmt = '%.3e') 
+    np.savetxt('velocidades.dat', velocidades3D, fmt = '%.3e') 
+    np.savetxt('energia_pot.dat', energia_pot, fmt = '%.3e')
 
 if __name__ == "__main__":
 
@@ -450,19 +504,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "--time_step",
         type=int,
-        default=40000,
+        default=1000,
         help="timesteps.",
     )
     parser.add_argument(
         "--div_r",
         type=int,
-        default=100,
+        default=25,
         help="divr.",
     )
     parser.add_argument(
         "--div_v",
         type=int,
-        default=100,
+        default=25,
         help="divv.",
     )
     parser.add_argument(
