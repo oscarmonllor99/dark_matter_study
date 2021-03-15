@@ -36,7 +36,7 @@ div_r = int(sim_parameters[3])
 div_v = int(sim_parameters[4])
 n_r = int(n / div_r) #numero de pasos de tiempo guardados para r
 n_v = int(n / div_v) #numero de pasos de tiempo guardados para v
-n_graf = 5
+n_graf = 6
 
 dt = sim_parameters[5]
 
@@ -55,7 +55,7 @@ R_CM = tray_CM.reshape(n_r, 3)
 
 #ESTO ES PARA LAS REPRESENTACIONES DE LAS CURVAS DE VELOCIDAD
 R_lim =  np.sqrt((lim/2)**2 + (lim/2)**2)
-Rs = np.linspace(0.001, R_lim, 200) 
+Rs = np.linspace(0.001, R_lim, 100) 
 
 def empty_list_of_lists(N):
     lista = []
@@ -216,7 +216,7 @@ for k in range(n_graf):
     sigma_data = np.array(sigma_data)
     
   
-    corte = np.argmax(v_tan_data[0:20])
+    corte = np.argmax(v_tan_data[:])
     param, cov = curve_fit(c, r_data[corte:-1], v_tan_data[corte:-1], guess, sigma = None, absolute_sigma = True)    
     c_fit = c(r_data[corte:-1], param[0], param[1]) #curve fit 
     R2 = r2_score(c_fit, v_tan_data[corte:-1])

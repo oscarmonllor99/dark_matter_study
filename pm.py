@@ -7,7 +7,8 @@ import argparse
 ##############################################
 ######### PARÁMETROS FÍSICOS  ################
 ##############################################
-NUM_PARTICLES = 200000 #Número de partículas
+Q = 1.5
+NUM_PARTICLES = 2000000 #Número de partículas
 NUM_PARTICLES_BULGE = int(0.14 * NUM_PARTICLES) #el 14% de la materia ordinaria es del bulbo
 M_TOTAL = 3245*2.325*1e7 #masa total de las particulas q van a interactuar
 M_PARTICLE = M_TOTAL / NUM_PARTICLES #masa de las particulas en Msolares
@@ -21,6 +22,15 @@ T_SOL = 225 #periodo del Sol alrededor de la galaxia en Millones de años
 ### FUNCIONES A UTILIZAR ###
 ##############################################
 
+@jit(nopython=True, fastmath = True, parallel = False)
+def W(d, h):
+    if d <= h/2:
+        return 3/4 - (d/h)**2
+    elif h/2 <= d <= 3*h/2:
+        return 0.5*(3/2 - d/h)**2
+    else:
+        return 0
+    
 @jit(nopython=True, fastmath = True, parallel = False)
 def factor_r(r):
     ah = 7.7
@@ -55,6 +65,31 @@ def pot_dark(r_vec, lim):
         return (-G*Mh/r)*np.log(1 + r/ah)
     else:
         return 0.0
+    
+@jit(nopython=True, fastmath = True, parallel = False)   
+def pot_bulge(r_vec, lim):
+    r_dark = np.zeros(3)
+    r_dark[0] = r_vec[0] - lim/2
+    r_dark[1] = r_vec[1] - lim/2
+    r_dark[2] = r_vec[2] - lim/2
+    #MODELO 3: Navarro-Frenk-White
+    Mb = 1.05*1e10
+    bb = 0.267
+    r = np.sqrt(np.dot(r_dark, r_dark))
+    return  - G*Mb / (r**2 + bb**2)**(1/2)
+
+@jit(nopython=True, fastmath = True, parallel = False)   
+def pot_disk(r_vec, lim):
+    r_dark = np.zeros(3)
+    r_dark[0] = r_vec[0] - lim/2
+    r_dark[1] = r_vec[1] - lim/2
+    r_dark[2] = r_vec[2] - lim/2
+    #MODELO 3: Navarro-Frenk-White
+    Md = 6.5*1e10
+    bd = 0.308
+    ad = 4.4
+    r = np.sqrt(np.dot(r_dark, r_dark))
+    return  -G*Md/(r**2 + (ad+bd)**2)**(1/2)
 
 @jit(nopython=True, fastmath = True, parallel = False)
 def CM(r_list):
@@ -70,7 +105,7 @@ def fuerza(r_list, g, i, dark, Np, h, lim):
     z_pos =  int(r_list_i[2]/h)
 
 
-    if x_pos <= 0 or x_pos >= Np-1 or y_pos <= 0 or y_pos >= Np-1 or z_pos <= 0 or z_pos >= Np-1:
+    if x_pos <= 1 or x_pos >= Np-1 or y_pos <= 1 or y_pos >= Np-1 or z_pos <= 1 or z_pos >= Np-1:
 
         if dark:
             r_centro = np.array([lim/2, lim/2, lim/2])
@@ -82,36 +117,55 @@ def fuerza(r_list, g, i, dark, Np, h, lim):
         
         
     else:
-
-        if dark:
-            return g[:, x_pos, y_pos, z_pos] + f_dark(r_list_i, lim)
-        else:
-            return g[:, x_pos, y_pos, z_pos]
         
+        fuerza_i = np.array([0., 0., 0.])
+        for x in range(-1, 2):
+            for y in range(-1, 2):
+                for z in range(-1, 2):
+                        dx = abs((x_pos + x + 0.5)*h - r_list[i,0])
+                        dy = abs((y_pos + y + 0.5)*h - r_list[i,1])
+                        dz = abs((z_pos + z + 0.5)*h - r_list[i,2])
+                        fuerza_i += ( g[:, x_pos + x, y_pos + y, z_pos + z] 
+                                      * W(dx, h) * W(dy, h) * W(dz, h) )
+        
+        if dark:
+            return fuerza_i + f_dark(r_list_i, lim)
+        else:
+            return fuerza_i
+        
+
+
 @jit(nopython=True, fastmath = True, parallel = False)
 def densidad(r_list, Np, h):
+    
     rho = np.zeros((Np, Np, Np))
+    
     for i in range(NUM_PARTICLES):
         
         x_pos = int(r_list[i,0] // h)
         y_pos = int(r_list[i,1] // h)
         z_pos = int(r_list[i,2] // h)
-        
-        if (x_pos <= 0 or x_pos >= Np-1 or y_pos <= 0 or y_pos >= Np-1 or 
-        z_pos <= 0 or z_pos >= Np-1):
+
+        if (x_pos <= 1 or x_pos >= Np-1 or y_pos  <= 1
+        or y_pos  >= Np-1 or z_pos <= 1 or z_pos  >= Np-1):
             
             pass
         
         else:
-        
-            rho[x_pos, y_pos, z_pos] += M_PARTICLE / h**3
-
+            
+            for x in range(-1, 2):
+                for y in range(-1, 2):
+                    for z in range(-1, 2):
+                        dx = abs((x_pos + x + 0.5)*h - r_list[i,0])
+                        dy = abs((y_pos + y + 0.5)*h - r_list[i,1])
+                        dz = abs((z_pos + z + 0.5)*h - r_list[i,2])
+                        rho[x_pos + x, y_pos + y, z_pos + z] += M_PARTICLE * W(dx, h) * W(dy, h) * W(dz, h)/h**3
     return rho
 
 @jit(nopython=True, fastmath = True)
 def poisson(rho, phi, Np, h):
     w = 0.95
-    tol = 1e-4
+    tol = 1e-5
     acabar = False
     while not acabar:
         max_diff = 0
@@ -162,14 +216,23 @@ def ener_pot_calculator(r_list, phi, dark, lim, Np, h):
                 ener_list[i] = -G*M_PARTICLE*M_TOTAL/np.linalg.norm(r_list[i]-r_centro)
         
         else:
-
+            
+            pot_i = 0.
+            for x in range(-1, 2):
+                for y in range(-1, 2):
+                    for z in range(-1, 2):
+                            dx = abs((x_pos + x + 0.5)*h - r_list[i,0])
+                            dy = abs((y_pos + y + 0.5)*h - r_list[i,1])
+                            dz = abs((z_pos + z + 0.5)*h - r_list[i,2])
+                            pot_i += (phi[x_pos + x, y_pos + y, z_pos + z] 
+                                          * W(dx, h) * W(dy, h) * W(dz, h) )
+            
             if dark:
                 
-                ener_list[i] = (M_PARTICLE*phi[x_pos, y_pos, z_pos] 
-                                + M_PARTICLE*pot_dark(r_list[i], lim))
+                ener_list[i] = (M_PARTICLE*pot_i + M_PARTICLE*pot_dark(r_list[i], lim))
             else:
                 
-                ener_list[i] = M_PARTICLE*phi[x_pos, y_pos, z_pos]
+                ener_list[i] = M_PARTICLE*pot_i 
                 
     return ener_list
 
@@ -177,7 +240,7 @@ def ener_pot_calculator(r_list, phi, dark, lim, Np, h):
 ###########################################################################
 
 def cond_inicial(lim, k_vel, eps, dark, Np, h, phi0):
-
+    
     #Montecarlo para obtener las densidades iniciales
     ###################################################
     ###################################################
@@ -187,13 +250,14 @@ def cond_inicial(lim, k_vel, eps, dark, Np, h, phi0):
         return  1/(r**2 + b**2)**(5/2)
     
     max_bulge = bulge(0)
-    
+
     @jit(fastmath = True, nopython = True)
     def MN(R, z):
         a = 4.4
         b = 0.308
         return ( (a*R**2 + (a + 3*(z**2 + b**2)**(1/2))*(a + (z**2+b**2)**(1/2))**2 ) 
                 / (( R**2 + (a + (z**2 + b**2)**(1/2))**2)**(5/2) * (z**2 + b**2)**(3/2)) )
+
     
     max_disk = MN(0, 0)
     
@@ -221,15 +285,13 @@ def cond_inicial(lim, k_vel, eps, dark, Np, h, phi0):
     
     r_list_0 = np.zeros((NUM_PARTICLES, 3), dtype = float)
     r_esf_tot = np.zeros((NUM_PARTICLES, 3), dtype = float)
-    E_rot = 0
-    E_pot = 0
 
     for i in range(NUM_PARTICLES):
              
             if i < NUM_PARTICLES_BULGE:
 
                 R = get_random_bulge(max_bulge)
-                while R>49:
+                while R>lim/2-1:
                     R = get_random_bulge(max_bulge)
                     
                 theta = random.uniform(0, np.pi)
@@ -246,7 +308,7 @@ def cond_inicial(lim, k_vel, eps, dark, Np, h, phi0):
             else:
         
                 R, z = get_random_disk(max_disk)
-                while R>49 or z>49:
+                while R>lim/2-1 or z>lim/2-1:
                     R, z = get_random_disk(max_disk)
                     
                 phi = random.uniform(0, 2*np.pi) 
@@ -262,9 +324,67 @@ def cond_inicial(lim, k_vel, eps, dark, Np, h, phi0):
     rho = densidad(r_list_0, Np, h)
     phi = poisson(rho, phi0, Np, h)
     g = gradiente(phi, Np, h)
+    
+    Rs = np.linspace(0, lim/2, 10000)
+    NR = len(Rs)
+    HR = lim / NR #lado de una celda
+    
+    phi_data = np.zeros(len(Rs))
+    for i in range(len(phi_data)):
+                r_vec = np.array([HR*(i+0.5) + lim/2, lim/2, lim/2])
+                if dark:
+                    phi_data[i] += pot_dark(r_vec, lim) + pot_bulge(r_vec, lim) + pot_disk(r_vec, lim)
+                else:
+                    phi_data[i] += pot_bulge(r_vec, lim) + pot_disk(r_vec, lim)
+    
+    phi1_data = np.gradient(phi_data, HR)
+    phi2_data = np.gradient(phi1_data, HR)
+    
 
     v_list_0 = np.zeros((NUM_PARTICLES, 3), dtype = float)
     
+    def k_ep(R):
+            R_pos = int(R/HR)
+            phi1_k = phi1_data[R_pos]
+            phi2_k = phi2_data[R_pos]
+            return np.sqrt(((3/R) * phi1_k) + (phi2_k))
+    
+    
+    def v_circular(R):
+            R_pos = int(R/HR)
+            phi1_k = phi1_data[R_pos]
+            return np.sqrt(R*phi1_k)
+    
+    
+    def omega(R):
+            R_pos = int(R/HR)
+            phi1_k = phi1_data[R_pos]
+            return np.sqrt(abs((1/R)*phi1_k))
+    
+    
+    
+    def sigma(R):
+        Md = 2798 * 2.325*1e7
+        hs = 2.43
+        return Md/(2*np.pi*hs**2) * np.exp(-R/hs)
+    
+    def sigma2_R(R):
+        return (Q*3.36*G*sigma(R) / k_ep(R))**2
+    
+        
+    def sigma2_phi(R):
+        return  sigma2_R(R) * (k_ep(R)/(2*omega(R)))**2
+    
+    def sigma2_z(R):
+        z0  = 0.26
+        return  np.pi*G*sigma(R)*z0
+    
+    def v_phi(R):
+        hs = 2.43
+        return  v_circular(R)**2 + sigma2_R(R) * (1 - (k_ep(R)/(2*omega(R)))**2 - 2*R/hs)
+    
+    E_rot = 0
+    E_pot = 0
     for i in range(NUM_PARTICLES):
 
         x_pos =  int(r_list_0[i,0] // h)
@@ -272,33 +392,17 @@ def cond_inicial(lim, k_vel, eps, dark, Np, h, phi0):
         z_pos =  int(r_list_0[i,2] // h)
         
         if dark:
-            phii = phi[x_pos, y_pos, z_pos] + pot_dark(r_list_0[i, :], lim)
+            phii = ( pot_dark(r_list_0[i,:], lim) + pot_bulge(r_list_0[i,:], lim) 
+                    + pot_disk(r_list_0[i,:], lim) )
             E_pot += M_PARTICLE*phii
         else:
-            phii = phi[x_pos, y_pos, z_pos]
+            phii = pot_bulge(r_list_0[i,:], lim) + pot_disk(r_list_0[i,:], lim)
             E_pot += M_PARTICLE*phii
             
         v_esc = np.sqrt(-2 * phii)
-
-        #producto de g con ur (vector unitario radial)
-        if dark:
-            g_vec = g[:, x_pos, y_pos, z_pos] + f_dark(r_list_0[i], lim)
-            
-        else:
-            g_vec = g[:, x_pos, y_pos, z_pos]
         
-
-        R_centro = np.zeros(3)
-        R_centro[0] = r_list_0[i, 0] - lim/2
-        R_centro[1] = r_list_0[i, 1] - lim/2
-        R_centro[2] = r_list_0[i, 2] - lim/2
-
-        R_norm = np.sqrt(np.dot(R_centro, R_centro))
-        ur = R_centro / R_norm
-        prod = abs(np.dot(g_vec, ur))
-        
-        v_circ = k_vel*np.sqrt(R_norm * prod)
-        E_rot += 0.5*M_PARTICLE*v_circ**2 
+        R_norm = r_esf_tot[i,0]
+        v_circ = k_vel*v_circular(R_norm)
         
         phi_g = r_esf_tot[i, 1]
 
@@ -308,16 +412,28 @@ def cond_inicial(lim, k_vel, eps, dark, Np, h, phi0):
                 v_r = random.uniform(-0.3*v_esc, 0.3*v_esc)   
                 v_z = v_circ*np.cos(theta_g)
                 v_tan = v_circ*np.sin(theta_g)
+                E_rot += 0.5*M_PARTICLE*v_tan**2 
                 
                 v_list_0[i, 0] = k_vel * (-v_tan * np.sin(phi_g) + v_r * np.cos(phi_g))
                 v_list_0[i, 1] = k_vel * (v_tan * np.cos(phi_g) + v_r * np.sin(phi_g))
                 v_list_0[i, 2] = k_vel * v_z
                 
         else:
+                if dark:
+                    v_phi_med = np.sqrt(v_phi(R_norm))
+                    
+                else:
+                    v_phi_med = v_circular(R_norm)
+                    
+                sigma_R = np.sqrt(sigma2_R(R_norm))
+                sigma_phi = np.sqrt(sigma2_phi(R_norm))
+                sigma_z = np.sqrt(sigma2_z(R_norm))
                 
-                v_tan = v_circ
-                v_R = random.uniform(-0.3*v_esc, 0.3*v_esc)   
-                v_z = random.uniform(-0.01*v_esc, 0.01*v_esc)
+                v_tan = random.gauss(v_phi_med, sigma_phi)  
+                v_R = random.gauss(0, sigma_R)   
+                v_z = random.gauss(0, sigma_z) 
+                
+                E_rot += 0.5*M_PARTICLE*v_tan**2 
                 
                 v_list_0[i, 0] = (-v_tan * np.sin(phi_g) + v_R * np.cos(phi_g))
                 v_list_0[i, 1] = (v_tan * np.cos(phi_g) + v_R * np.sin(phi_g))
@@ -330,7 +446,7 @@ def cond_inicial(lim, k_vel, eps, dark, Np, h, phi0):
         f_list_0[i, 1] = force[1]
         f_list_0[i, 2] = force[2]
 
-    print('Ostriker-Peebles criterion (t ~< 0.14): ', E_rot/abs(E_pot))
+    print('Ostriker-Peebles criterion (t ~< 0.14): ', E_rot/abs(0.5*E_pot))
     return r_list_0, v_list_0, f_list_0
 
 
@@ -504,19 +620,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "--time_step",
         type=int,
-        default=1000,
+        default=2000,
         help="timesteps.",
     )
     parser.add_argument(
         "--div_r",
         type=int,
-        default=25,
+        default=100,
         help="divr.",
     )
     parser.add_argument(
         "--div_v",
         type=int,
-        default=25,
+        default=100,
         help="divv.",
     )
     parser.add_argument(
@@ -528,7 +644,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--k_vel",
         type=float,
-        default=1.0,
+        default=1,
         help="kvel.",
     )
     parser.add_argument(

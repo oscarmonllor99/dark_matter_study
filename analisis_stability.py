@@ -17,7 +17,6 @@ sim_parameters = np.loadtxt('parameters.dat')
 
 M = 3245*2.325*1e7 #masa total de las particulas q van a interactuar
 N = int(sim_parameters[0]) #Número de partículas
-Nb = int(0.14 * N)
 m = M / N #masa de las particulas en Msolares
 G = 4.518 * 1e-12
 
@@ -60,8 +59,6 @@ def Q_calculator(eners_pot, vels, m, N, n_v, rho):
         v_list_c = []
         
         for i in range(N):
-
-            if i > Nb:
                 
                 R_centro = np.zeros(3)
                 R_centro[0] = tray_3D[k, i, 0] - R_CM[k, 0]
@@ -113,8 +110,25 @@ def t_calculator(eners_pot, vels, m, N, n_v):
         
         for i in range(N):
             
-            ener_cin += 0.5*m*(vels[k, i, 0]**2 + vels[k, i, 1]**2 + vels[k, i, 2]**2)
-            ener_pot += eners_pot[k, i]
+            vx = vels[k, i, 0]
+            vy = vels[k, i, 1]
+            
+            x = tray_3D[k, i, 0]
+            y = tray_3D[k, i, 1]
+            
+            if (x - R_CM[k, 0]) != 0.:
+                
+                theta_g = np.arctan((y - R_CM[k, 1]) / (x - R_CM[k, 0])) 
+                
+                if (y  - R_CM[k, 1]) < 0 or (x - R_CM[k, 0]) < 0: 
+                    theta_g = np.pi + theta_g
+            else:
+                theta_g = 0.
+                
+            v_ang = -vx*np.sin(theta_g) + vy*np.cos(theta_g)
+            
+            ener_cin += 0.5*m*v_ang**2
+            ener_pot += 0.5*eners_pot[k, i]
 
         t_list[k] = abs(ener_cin/ener_pot)
     
@@ -160,13 +174,13 @@ c_fit_t = c(t, param_t[0], param_t[1])
 param_Q, cov_Q = curve_fit(c, t, Q_list, guess, sigma = None, absolute_sigma = True)    
 c_fit_Q = c(t, param_Q[0], param_Q[1],) 
 
-fig, axs = plt.subplots(1, 2)
+fig, axs = plt.subplots(1, 2, figsize = (8, 5))
 axs[0].scatter(t, t_list, c = 'red', s = 5, marker = '*', label = "$t$")
-axs[0].plot(t, c_fit_t, c = 'black')
+#axs[0].plot(t, c_fit_t, c = 'black')
 axs[0].set_xlabel('Tiempo (My)')
 axs[0].set_ylabel('t (Ostriker-Peebels)')
 axs[1].scatter(t, Q_list, c = 'blue', s = 5, marker = '*', label = "$Q$")
-axs[1].plot(t, c_fit_Q, c = 'black')
+#axs[1].plot(t, c_fit_Q, c = 'black')
 axs[1].set_xlabel('Tiempo (My)')
 axs[1].set_ylabel('Q (Toomre)')
 plt.savefig('curva_de_estabilidad.png')

@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import random 
 import time
 from matplotlib import colors
+from scipy.optimize import curve_fit
 ##############################################
 ######### PARÁMETROS FÍSICOS  ################
 ##############################################
@@ -24,9 +25,27 @@ T_SOL = 225 #periodo del Sol alrededor de la galaxia en Millones de años
 ### PARÁMETROS DE SIMULACIÓN
 ##############################################
 
+dark = True
+
+@jit(nopython=True, fastmath = True, parallel = False)
+def pot_dark(r_vec, lim):
+    r_dark = np.zeros(3)
+    r_dark[0] = r_vec[0] - lim/2
+    r_dark[1] = r_vec[1] - lim/2
+    r_dark[2] = r_vec[2] - lim/2
+    #MODELO 3: Navarro-Frenk-White
+    Mh = 12474 * 2.325*1e7
+    ah = 7.7
+    r = np.sqrt(np.dot(r_dark, r_dark))
+    if r > 0.0:
+        return (-G*Mh/r)*np.log(1 + r/ah)
+    else:
+        return 0.0
+    
 lim = 100 #tamaño de la caja en kpc
 
-NP = 100 #número de celdas
+NP = 150 #número de celdas
+NC = int(NP/2)
 
 H = lim / NP #lado de una celda
 
@@ -130,37 +149,65 @@ def sign(x):
     if x < 0.:
         return -1
     return
+
+"""
+@jit(nopython=True, fastmath = True, parallel = False)
+def W(d, h):
+    if d <= h/2:
+        return 3/4 - (d/h)**2
+    elif h/2 <= d <= 3*h/2:
+        return 0.5*(3/2 - d/h)**2
+    else:
+        return 0
     
-    
+"""
+
+@jit(nopython=True, fastmath = True, parallel = False)
+def W(d, h):
+    if d <= h:
+        return 1-d/h
+    else:
+        return 0
 
 @jit(nopython=True, fastmath = True, parallel = False)
 def densidad(r_list, Np, h):
+    
     rho = np.zeros((Np, Np, Np))
+    
     for i in range(NUM_PARTICLES):
         
         x_pos = int(r_list[i,0] // h)
         y_pos = int(r_list[i,1] // h)
         z_pos = int(r_list[i,2] // h)
-        
-        if (x_pos <= 0 or x_pos >= Np or y_pos  <= 0
-        or y_pos  >= Np or z_pos <= 0 or z_pos  >= Np):
+
+        if (x_pos <= 1 or x_pos >= Np-1 or y_pos  <= 1
+        or y_pos  >= Np-1 or z_pos <= 1 or z_pos  >= Np-1):
             
             pass
         
         else:
-            rho[x_pos, y_pos, z_pos] += M_PARTICLE/h**3
             
+            for x in range(-1, 2):
+                for y in range(-1, 2):
+                    for z in range(-1, 2):
+                        dx = abs((x_pos + x + 0.5)*h - r_list[i,0])
+                        dy = abs((y_pos + y + 0.5)*h - r_list[i,1])
+                        dz = abs((z_pos + z + 0.5)*h - r_list[i,2])
+                        rho[x_pos + x, y_pos + y, z_pos + z] += M_PARTICLE * W(dx, h) * W(dy, h) * W(dz, h)/h**3
+
     return rho
 
-
+t0 = time.time()
 RHO0 = densidad(r_list_0, NP, H)
 
 plt.figure()
-plt.imshow(RHO0[:,:,int(NP/2)] + 0.01, norm=colors.LogNorm())
+cmap = plt.cm.get_cmap("gray")
+plt.imshow(RHO0[:,:,int(NP/2)] + 0.01, norm=colors.LogNorm(), cmap = cmap)
 plt.show()
 
 plt.figure()
-plt.imshow(np.transpose(RHO0[int(NP/2),:,:]) + 0.01, norm=colors.LogNorm())
+cmap = plt.cm.get_cmap("gray")
+plt.imshow(np.transpose(RHO0[int(NP/2),:,:]) + 0.01, norm=colors.LogNorm(), cmap = cmap)
 plt.show()
 
 PHI0 = np.zeros((NP, NP, NP)) 
@@ -175,7 +222,7 @@ PHI0[NP-1, :, :] = -G*M_TOTAL/(R0[NP-1, :, :])
 @jit(nopython=True, fastmath = True)
 def poisson(rho, phi, Np, h):
     w = 0.95
-    tol = 1e-4
+    tol = 1e-5
     acabar = False
     iterations = 0
     while not acabar:
@@ -204,10 +251,8 @@ tf = time.time()
 print(tf-t0)
 
 fig, ax = plt.subplots()
-cmap = plt.cm.get_cmap("inferno")
-cs = ax.contourf(phi[:,:, int(NP/2)], cmap = cmap, levels = 75) #pasamos el potencial a km**2 / s**2
+cmap = plt.cm.get_cmap("gray")
+cs = ax.contourf(phi[:,:, int(NP/2)], cmap = cmap, levels = 70) #pasamos el potencial a km**2 / s**2
 colorbar = fig.colorbar(cs)
 colorbar.ax.set_xlabel('$\phi (kpc^2/My^2)$')
 plt.show()
-
-    

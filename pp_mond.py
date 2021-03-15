@@ -4,14 +4,16 @@ Created on Tue Jun 30 15:05:09 2020
 
 @author: Oscar
 """
-from numba import jit, cuda, prange
+from numba import jit, prange
 import numpy as np
 import random 
 import time
 import argparse
+
 ##############################################
 ######### PARÁMETROS FÍSICOS  ################
 ##############################################
+Q = 1.5
 NUM_PARTICLES = 4000 #Número de partículas
 NUM_PARTICLES_BULGE = int(0.14 * NUM_PARTICLES) #el 14% de la materia ordinaria es del bulbo
 M_TOTAL = 3245*2.325*1e7 #masa total de las particulas q van a interactuar
@@ -20,29 +22,6 @@ G = 4.518 * 1e-12 #constante de gravitación universal en Kpc, Msolares y Millon
 T_SOL = 225 #periodo del Sol alrededor de la galaxia en Millones de años
 ##############################################
 ##############################################
-
-##############################################
-### FUNCIONES A UTILIZAR ###
-##############################################
-@jit(nopython=True, fastmath = True, parallel = False)
-def factor_r(r):
-    ah = 7.7
-    return (1/r**3)*np.log(1+r/ah) - 1/(ah*r**2 + r**3)
-
-@jit(nopython=True, fastmath = True, parallel = False)
-def f_dark(r_vec, lim):
-    r_dark = np.zeros(3)
-    r_dark[0] = r_vec[0] - lim/2
-    r_dark[1] = r_vec[1] - lim/2
-    r_dark[2] = r_vec[2] - lim/2
-    #MODELO 3: Navarro-Frenk-White
-    Mh = 12474 * 2.325*1e7
-    r = np.sqrt(np.dot(r_dark, r_dark))
-    g = np.zeros(3)
-    if r > 0.0:
-        factor = factor_r(r)
-        g = -G*Mh*factor*r_dark
-    return g
 
 @jit(nopython=True, fastmath = True, parallel = False)
 def pot_dark(r_vec, lim):
@@ -57,7 +36,40 @@ def pot_dark(r_vec, lim):
     if r > 0.0:
         return (-G*Mh/r)*np.log(1 + r/ah)
     else:
-        return 0.
+        return 0.0
+
+@jit(nopython=True, fastmath = True, parallel = False)   
+def pot_bulge(r_vec, lim):
+    r_dark = np.zeros(3)
+    r_dark[0] = r_vec[0] - lim/2
+    r_dark[1] = r_vec[1] - lim/2
+    r_dark[2] = r_vec[2] - lim/2
+    #MODELO 3: Navarro-Frenk-White
+    Mb = 443 * 2.325*1e7
+    bb = 0.267
+    r = np.sqrt(np.dot(r_dark, r_dark))
+    return  - G*Mb / (r**2 + bb**2)**(1/2)
+
+@jit(nopython=True, fastmath = True, parallel = False)   
+def pot_disk(r_vec, lim):
+    r_dark = np.zeros(3)
+    r_dark[0] = r_vec[0] - lim/2
+    r_dark[1] = r_vec[1] - lim/2
+    r_dark[2] = r_vec[2] - lim/2
+    #MODELO 3: Navarro-Frenk-White
+    Md = 2798 * 2.325*1e7
+    bd = 0.308
+    ad = 4.4
+    r = np.sqrt(np.dot(r_dark, r_dark))
+    return  -G*Md/(r**2 + (ad+bd)**2)**(1/2)
+
+##############################################
+### FUNCIONES A UTILIZAR ###
+##############################################
+@jit(nopython=True, fastmath = True, parallel = False)
+def interpolation(y):
+    return 0.5*( 1 + (1+4*y**(-1))**(1/2) )
+
 
 @jit(nopython=True, fastmath = True, parallel = False)
 def CM(r_list):
@@ -80,7 +92,7 @@ def fuerza_part(i, r_list, sumatorio_f, eps):
 
     return sumatorio_f * (-G)
     
-@jit(nopython=True, fastmath = True, parallel = False)
+@jit(nopython=True, fastmath = False, parallel = False)
 def ener_pot(i, r_list, sumatorio_E, eps):
 
     for j in range(NUM_PARTICLES):
@@ -97,33 +109,22 @@ def ener_pot(i, r_list, sumatorio_E, eps):
     return sumatorio_E * (-G)
 
 @jit(nopython = True, fastmath = True, parallel = False)
-def ener_pot_calculator(r_list, eps, dark, lim):
+def ener_pot_calculator(r_list, eps):
     ener_list = np.zeros(NUM_PARTICLES)
     for i in range(NUM_PARTICLES):
-        if dark:
-            ener_list[i] = ener_pot(i, r_list, 0.0, eps) + M_PARTICLE*pot_dark(r_list[i], lim)
-        else:
-            ener_list[i] = ener_pot(i, r_list, 0.0, eps)  
+        ener_list[i] = ener_pot(i, r_list, 0.0, eps)  
     return ener_list
 
 ###########################################################################
 ###########################################################################
 
-def rho_bulge(r):
-    bb = 0.267
-    return (3*bb**2 / 4*np.pi) * (1 / (r**2 + bb**2)**5/2)
-
-def r_pos(z, lim):
-    bb = 0.267
-    r = np.sqrt((3*bb**2 * lim**3/(4*np.pi*z))**2/5 - bb**2) / 7611 - 1
-    return r
 
 #################################################################
 # CONDICIONES INICIALES DE LAS PARTÍCULAS ###
 #################################################################
 
-def cond_inicial(lim, k_vel, eps, dark):
-    
+def cond_inicial(lim, k_vel, eps):
+
     #Montecarlo para obtener las densidades iniciales
     ###################################################
     ###################################################
@@ -138,8 +139,10 @@ def cond_inicial(lim, k_vel, eps, dark):
     def MN(R, z):
         a = 4.4
         b = 0.308
-        return ( (a*R**2 + (a + 3*(z**2 + b**2)**(1/2))*(a + (z**2+b**2)**(1/2))**2 ) 
-                / (( R**2 + (a + (z**2 + b**2)**(1/2))**2)**(5/2) * (z**2 + b**2)**(3/2)) )
+        return ( (a*R**2 + (a + 3*(z**2 + b**2)**(1/2))
+                  *(a + (z**2+b**2)**(1/2))**2 ) 
+                / (( R**2 + (a + (z**2 + b**2)**(1/2))**2)**(5/2) 
+                   * (z**2 + b**2)**(3/2)) )
     
     max_disk = MN(0, 0)
     
@@ -164,7 +167,6 @@ def cond_inicial(lim, k_vel, eps, dark):
         return R,z
     ###################################################
     ###################################################
-    
     r_list_0 = np.zeros((NUM_PARTICLES, 3), dtype = float)
     r_esf_tot = np.zeros((NUM_PARTICLES, 3), dtype = float)
     E_rot = 0
@@ -197,25 +199,77 @@ def cond_inicial(lim, k_vel, eps, dark):
                 r_list_0[i, 0] = lim/2 + R*np.cos(phi)
                 r_list_0[i, 1] = lim/2 + R*np.sin(phi)
                 r_list_0[i, 2] = lim/2 + z
-
-    
-    f_list_0 = np.zeros((NUM_PARTICLES, 3), dtype = float) 
-    
-    for u in range(NUM_PARTICLES):
-        sumatorio_f = np.array([0.,0.,0.])
-        if dark:
-            force = fuerza_part(u, r_list_0, sumatorio_f, eps) + f_dark(r_list_0[u], lim)
-            f_list_0[u, 0] = force[0]
-            f_list_0[u, 1] = force[1]
-            f_list_0[u, 2] = force[2]
-        else:
-            force = fuerza_part(u, r_list_0, sumatorio_f, eps)
-            f_list_0[u, 0] = force[0]
-            f_list_0[u, 1] = force[1]
-            f_list_0[u, 2] = force[2]
             
 
-    v_list_0 = np.zeros((NUM_PARTICLES, 3), dtype = float)
+    f_list_0 = np.zeros((NUM_PARTICLES, 3), dtype = float)
+ 
+    
+    for u in range(NUM_PARTICLES):
+        a_0 = 3.87*1e-3
+        sumatorio_f = np.array([0.,0.,0.])
+        fuerza = fuerza_part(u, r_list_0, sumatorio_f, eps)
+        f_mod = np.sqrt(fuerza[0]**2 + fuerza[1]**2 + fuerza[2]**2)
+        nu = interpolation(f_mod/a_0)
+        f_list_0[u, :] = fuerza[:]*nu
+            
+
+    #distribución aleatoria de las velocidades, teniendo siempre velocidad tangencial
+    #se distribuyen las velocidades según la velocidad de escape dada para cada posición   
+
+    v_list_0 = np.zeros((NUM_PARTICLES, 3))
+    
+    Rs = np.linspace(0, lim/2, 10000)
+    NR = len(Rs)
+    HR = lim / NR #lado de una celda
+    
+    phi_data = np.zeros(len(Rs))
+    for i in range(len(phi_data)):
+        r_vec = np.array([HR*(i+0.5) + lim/2, lim/2, lim/2])
+        phi_data[i] += pot_dark(r_vec, lim) + pot_bulge(r_vec, lim) + pot_disk(r_vec, lim)
+
+    
+    phi1_data = np.gradient(phi_data, HR)
+    phi2_data = np.gradient(phi1_data, HR)
+    
+    def k_ep(R):
+            R_pos = int(R/HR)
+            phi1_k = phi1_data[R_pos]
+            phi2_k = phi2_data[R_pos]
+            return np.sqrt(((3/R) * phi1_k) + (phi2_k))
+    
+    
+    def v_circular(R):
+            R_pos = int(R/HR)
+            phi1_k = phi1_data[R_pos]
+            return np.sqrt(R*phi1_k)
+    
+    
+    def omega(R):
+            R_pos = int(R/HR)
+            phi1_k = phi1_data[R_pos]
+            return np.sqrt(abs((1/R)*phi1_k))
+    
+    
+    
+    def sigma(R):
+        Md = 2798 * 2.325*1e7
+        hs = 2.43
+        return Md/(2*np.pi*hs**2) * np.exp(-R/hs)
+    
+    def sigma2_R(R):
+        return (Q*3.36*G*sigma(R) / k_ep(R))**2
+    
+        
+    def sigma2_phi(R):
+        return  sigma2_R(R) * (k_ep(R)/(2*omega(R)))**2
+    
+    def sigma2_z(R):
+        z0  = 0.26
+        return  np.pi*G*sigma(R)*z0
+    
+    def v_phi(R):
+        hs = 2.43
+        return  v_circular(R)**2 + sigma2_R(R) * (1 - (k_ep(R)/(2*omega(R)))**2 - 2*R/hs)
     
     for i in range(NUM_PARTICLES):
 
@@ -224,15 +278,10 @@ def cond_inicial(lim, k_vel, eps, dark):
             #Cálculo de la energía potencial para v escape
             ###################################################
             sumatorio_E = 0.
-            
-            if dark:
-                Ui = ener_pot(i, r_list_0, sumatorio_E, eps) + M_PARTICLE*pot_dark(r_list_0[i], lim)
-                E_pot += Ui
-            else:
-                Ui = ener_pot(i, r_list_0, sumatorio_E, eps)  
-                E_pot += Ui
-           
 
+            Ui = ener_pot(i, r_list_0, sumatorio_E, eps)  
+            E_pot += Ui
+            
             v_esc = np.sqrt(-2*Ui/M_PARTICLE)
 
             #producto vectorial de g con ur (vector unitario radial)
@@ -243,9 +292,9 @@ def cond_inicial(lim, k_vel, eps, dark):
             R_centro[1] = r_list_0[i, 1] - lim/2
             R_centro[2] = r_list_0[i, 2] - lim/2
             
-            R_norm = np.sqrt(np.dot(R_centro, R_centro))
+            R_norm =  np.linalg.norm(R_centro)
             ur = R_centro / R_norm
-            prod = abs(np.dot(g_vec, ur))
+            prod =  abs(np.inner(g_vec, ur))
             
             v_circ = k_vel*np.sqrt(R_norm * prod)
             E_rot += 0.5*M_PARTICLE*v_circ**2 
@@ -255,7 +304,7 @@ def cond_inicial(lim, k_vel, eps, dark):
             if i < NUM_PARTICLES_BULGE:
                 
                 theta_g = r_esf_tot[i, 2]    
-                v_r = random.uniform(-0.3*v_esc, 0.3*v_esc)   
+                v_r = random.uniform(-0.1*v_esc, 0.1*v_esc)   
                 v_z = v_circ*np.cos(theta_g)
                 v_tan = v_circ*np.sin(theta_g)
                 
@@ -265,16 +314,20 @@ def cond_inicial(lim, k_vel, eps, dark):
                 
             else:
                 
-                v_tan = v_circ
-                v_R = random.uniform(-0.3*v_esc, 0.3*v_esc)   
-                v_z = random.uniform(-0.01*v_esc, 0.01*v_esc)
+                sigma_R = np.sqrt(sigma2_R(R_norm))
+                v_phi_med = np.sqrt(v_phi(R_norm))
+                sigma_phi = np.sqrt(sigma2_phi(R_norm))
+                sigma_z = np.sqrt(sigma2_z(R_norm))
+                
+                v_tan = random.gauss(v_phi_med, sigma_phi)  
+                v_R = random.gauss(0, sigma_R)   
+                v_z = random.gauss(0, sigma_z) 
 
                 v_list_0[i, 0] = (-v_tan * np.sin(phi_g) + v_R * np.cos(phi_g))
                 v_list_0[i, 1] = (v_tan * np.cos(phi_g) + v_R * np.sin(phi_g))
                 v_list_0[i, 2] = v_z
-    
-    print('Ostriker-Peebles criterion (t ~< 0.14): ', E_rot/abs(E_pot))
-    
+
+    print('Ostriker-Peebles criterion (t ~< 0.14): ', E_rot/abs(0.5*E_pot))
     return r_list_0, v_list_0, f_list_0
     
 #################################################################
@@ -285,7 +338,9 @@ def cond_inicial(lim, k_vel, eps, dark):
 #################################################################
 
 @jit(nopython=True, fastmath = True, parallel = False)
-def paso(r_list, v_list, f_list, dt, eps, dark, lim):
+def paso(r_list, v_list, f_list, dt, eps):
+    
+    a_0 = 3.87*1e-3
     
     r_list_new = r_list + dt*v_list + 0.5 * dt**2 * f_list
     
@@ -293,14 +348,11 @@ def paso(r_list, v_list, f_list, dt, eps, dark, lim):
     
     for u in range(NUM_PARTICLES):
         sumatorio_f = np.array([0.,0.,0.])
-        if dark:
-            force = fuerza_part(u, r_list_new, sumatorio_f, eps) + f_dark(r_list_new[u], lim)
-        else:
-            force = fuerza_part(u, r_list_new, sumatorio_f, eps)
+        fuerza = fuerza_part(u, r_list_new, sumatorio_f, eps)
+        f_mod = np.sqrt(fuerza[0]**2 + fuerza[1]**2 + fuerza[2]**2)
+        nu = interpolation(f_mod/a_0)
+        f_list_new[u, :] = fuerza[:]*nu
         
-        
-        f_list_new[u] = force
-
     v_list_new = v_list + 0.5*dt*(f_list_new + f_list)
     
     return r_list_new, v_list_new, f_list_new
@@ -316,7 +368,8 @@ def paso(r_list, v_list, f_list, dt, eps, dark, lim):
 #####################################################################################################
 #####################################################################################################
 
-def tiempo(r_list, v_list, f_list, n, n_r, n_v, div_r, div_v, dt, eps, dark, lim):
+
+def tiempo(r_list, v_list, f_list, n, n_r, n_v, div_r, div_v, dt, eps):
     #Lista de trayectorias de todas las partículas
     tray = np.empty((n_r, NUM_PARTICLES, 3))
     tray_CM = np.empty((n_r, 3))
@@ -324,16 +377,17 @@ def tiempo(r_list, v_list, f_list, n, n_r, n_v, div_r, div_v, dt, eps, dark, lim
     eners = np.empty((n_v, NUM_PARTICLES))
 
     for k in range(n):
-        
+        #Estos son los indices de paso de tiempo para guardar r y v
+
         R_CM = CM(r_list)
         
         if k == 1:
             t0 = time.time()
-            r_list, v_list, f_list = paso(r_list, v_list, f_list, dt, eps, dark, lim)
+            r_list, v_list, f_list = paso(r_list, v_list, f_list, dt, eps)
             tf = time.time()
             print("El programa va a tardar:", int(n*(tf-t0)/60),"minutos")
         else:
-            r_list, v_list, f_list= paso(r_list, v_list, f_list, dt, eps, dark, lim)
+            r_list, v_list, f_list= paso(r_list, v_list, f_list, dt, eps)
             
         if k%div_r == 0.0:
             k_r = int(k // div_r)
@@ -344,19 +398,18 @@ def tiempo(r_list, v_list, f_list, n, n_r, n_v, div_r, div_v, dt, eps, dark, lim
             k_v = int(k // div_v)
             print((k/n)*100, "%")
             vels[k_v, :, :] = v_list[:, :]
-            ener_list = ener_pot_calculator(r_list, eps, dark, lim)
+            ener_list = ener_pot_calculator(r_list, eps)
             eners[k_v, :] = ener_list[:]
-            
+
     return tray, tray_CM, vels, eners
-      
+
 ####################################################################################
 ####################################################################################
 ####################################################################################
 
-
-#############################
+###########################################################################
 # MAIN
-###########################
+###########################################################################
 
 def main(args):
     ##############################################
@@ -373,18 +426,15 @@ def main(args):
     EPS = np.sqrt(2*D_MIN / 3**(3/2)) 
     K_VEL= args.k_vel#parámetro de control de momento angular inicial (0--> velocidad angular inicial 0
     #                                                          1--> velocidad angular inicial máxima)
-    DARK = args.dark
-    
-    simulation_parameters = np.array([NUM_PARTICLES, LIM, TIME_STEPS, DIV_R, DIV_V, DT, EPS, K_VEL, DARK])
-    np.savetxt('parameters.dat', simulation_parameters)
+    simulation_parameters = np.array([NUM_PARTICLES, LIM, TIME_STEPS, DIV_R, DIV_V, DT, EPS, K_VEL])
+    np.savetxt('parameters.dat', simulation_parameters, fmt = '%.5e')
     ##############################################
     ##############################################
 
-    r_list_0, v_list_0, f_list_0 = cond_inicial(LIM, K_VEL, EPS, DARK)
+    r_list_0, v_list_0, f_list_0 = cond_inicial(LIM, K_VEL, EPS)
 
     t0 = time.time()
-    trayectorias, trayectoria_CM, velocidades, energia_pot = tiempo(r_list_0, v_list_0, f_list_0, TIME_STEPS, 
-                                                       N_R, N_V, DIV_R, DIV_V, DT, EPS, DARK, LIM)  
+    trayectorias, trayectoria_CM, velocidades, energia_pot = tiempo(r_list_0, v_list_0, f_list_0, TIME_STEPS, N_R, N_V, DIV_R, DIV_V, DT, EPS)
     tf = time.time()
 
     print('El programa ha tardado: ', ((tf-t0)/60), 'minutos en completar las trayectorias.')
@@ -396,10 +446,9 @@ def main(args):
     np.savetxt('velocidades.dat', velocidades3D, fmt = '%.3e') #fmt es cuantas cifras decimales
     np.savetxt('energia_pot.dat', energia_pot, fmt = '%.3e')
 
-
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description="FB")
+    parser = argparse.ArgumentParser(description="FB MOND")
 
     parser.add_argument(
         "--lim",
@@ -437,16 +486,8 @@ if __name__ == "__main__":
         default=1.0,
         help="kvel.",
     )
-    parser.add_argument(
-        "--dark",
-        type=bool,
-        default=True,
-        help="dark_matter.",
-    )
    
     args = parser.parse_args()
     main(args)
-
-
 
 

@@ -23,13 +23,14 @@ save = True
 ###########################################
 ##########################################
 
+sim_parameters = np.loadtxt('parameters.dat')
 
 """""""""""""""
 Parámetros físicos
 
 """""""""""""""
 
-N = 20000 #Número de partículas
+N = int(sim_parameters[0]) #Número de partículas
 
 T_sol = 225 #periodo del Sol alrededor de la galaxia
 
@@ -39,17 +40,17 @@ Parámetros de simulación
 """""""""""""""
 salt = 1 #salto en los pasos, en vez de ir de 1 paso en 1 paso, se va de salt en salt para agilizar y ahorrar espacio
 
-lim = 100 #en kpc
+lim = sim_parameters[1]
 
 x_lim, y_lim, z_lim = lim, lim, lim
 
-ntot = 10000 #número de pasos totales de tiempo
-div_r = 25
+ntot = int(sim_parameters[2])
+div_r = int(sim_parameters[3])
 n = int(ntot / div_r) #numero de pasos de tiempo guardados para r
 
-dt = (T_sol / 2000) #intervalo de tiempo entre cada paso
+dt = sim_parameters[5]
 
-r = 0.02 #en kpc
+r = 0.01 #en kpc
 
 tray = np.loadtxt('trayectorias.dat', dtype = float)
 tray_3D = tray.reshape(n, N, 3)
@@ -58,23 +59,24 @@ tray_3D = tray.reshape(n, N, 3)
 
 
 #creamos la figura
-fig = plt.figure()
-ax = p3.Axes3D(fig)
-ax.azim = 180
-ax.elev = 50
+fig, (ax1, ax2) = plt.subplots(nrows = 1, ncols = 2, figsize = (8, 5))
+#fig.tight_layout()
+ax1.set_xlabel('XY')
+ax2.set_xlabel('YZ')
 
-ax.set_xlim([-x_lim/2, x_lim/2])
-ax.set_xlabel('X (kpc)')
+ax1.set_xlim([-x_lim/2, x_lim/2])
     
-ax.set_ylim([-y_lim/2, y_lim/2])
-ax.set_ylabel('Y (kpc)')
+ax1.set_ylim([-y_lim/2, y_lim/2])
     
-ax.set_zlim([-z_lim/2 , z_lim/2])
-ax.set_zlabel('Z (kpc)')
+ax2.set_xlim([-y_lim/2, y_lim/2])
+    
+ax2.set_ylim([-z_lim/2, z_lim/2])
 
-ax.set_facecolor('white')
+ax1.set_facecolor('white')
+ax2.set_facecolor('white')
 
-ax.set_axis_off()
+ax1.set_axis_off()
+ax2.set_axis_off()
 
 #dibujamos las esferas que representan a cada partícula
     
@@ -86,7 +88,8 @@ Z = np.copy(X)
 #tray[paso de tiempo, particula, eje]
 X[:], Y[:], Z[:] = tray_3D[0, :, 0], tray_3D[0, :, 1], tray_3D[0, :, 2],
 
-particulas, = ax.plot(X, Y, Z, marker = 'd', c = 'black', markersize = 10*r, linestyle='None')
+plot_XY, = ax1.plot(X, Y, marker = 'd', c = 'black', markersize = 10*r, linestyle='None')
+plot_YZ, = ax2.plot(Y, Z, marker = 'd', c = 'black', markersize = 10*r, linestyle='None')
 plt.grid()
 txt = fig.suptitle('')
        
@@ -100,10 +103,10 @@ def animation_frame(k):
         Y = tray_3D[k, :, 1] - y_lim/2
         Z = tray_3D[k, :, 2] - z_lim/2
 
-        particulas.set_data(X, Y)
-        particulas.set_3d_properties(Z, 'z')
+        plot_XY.set_data(X, Y)
+        plot_YZ.set_data(Y, Z)
 
-        return particulas, txt
+        return txt
             
     
 movimiento = FuncAnimation(fig, func=animation_frame, frames=np.arange(1, n, salt),repeat=True,
@@ -113,6 +116,6 @@ movimiento = FuncAnimation(fig, func=animation_frame, frames=np.arange(1, n, sal
 if save:
         # Set up formatting for the movie files
         Writer = animation.writers['ffmpeg']
-        writer = Writer(fps=20, metadata=dict(artist='Me'), bitrate=1800)
+        writer = Writer(fps=2, metadata=dict(artist='Me'), bitrate=1800)
         movimiento.save('movimiento.mp4', writer=writer)
 
