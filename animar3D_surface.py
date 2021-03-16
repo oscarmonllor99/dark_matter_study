@@ -124,15 +124,15 @@ rho = iterator_rho(np.empty((n, Np+1, Np+1)))
 rho_z = iterator_rho_z(np.empty((n, Np+1, Np+1)))
 
 
-im1 = ax1.imshow(rho[0,:,:], cmap = 'nipy_spectral', norm=colors.PowerNorm(gamma=0.1), interpolation = 'gaussian')
+im1 = ax1.imshow(rho[0,:,:], cmap = 'nipy_spectral', norm=colors.PowerNorm(gamma=0.3), interpolation = 'gaussian')
 scatter_CM1 = ax1.scatter(R_CM[0,0], R_CM[0,1], c = 'white', s=1000000, 
-                          marker = '+', linewidths=1, alpha = 0.8)
-im2 = ax2.imshow(rho_z[0,:,:], cmap = 'nipy_spectral', norm=colors.PowerNorm(gamma=0.1), interpolation = 'gaussian')
+                          marker = '+', linewidths=1, alpha = 0.5)
+im2 = ax2.imshow(rho_z[0,:,:], cmap = 'nipy_spectral', norm=colors.PowerNorm(gamma=0.3), interpolation = 'gaussian')
 scatter_CM2 = ax2.scatter(R_CM[0,1], R_CM[0,2], c = 'white', s=1000000, 
-                          marker = '+', linewidths=1, alpha = 0.8)
+                          marker = '+', linewidths=1, alpha = 0.5)
 txt = fig.suptitle('{:d} millones de años'.format(int(0*div_r*dt)))
 colorbar = fig.colorbar(im1, fraction = 0.15)
-colorbar.ax.set_xlabel('$M_0$')
+colorbar.ax.set_xlabel('$M_0 · kpc^{-3}$')
 
 def animation_frame(k):
     txt.set_text('{:d} millones de años'.format(int(k*div_r*dt)))

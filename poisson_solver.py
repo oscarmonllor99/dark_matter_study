@@ -14,7 +14,7 @@ from scipy.optimize import curve_fit
 ##############################################
 ######### PARÁMETROS FÍSICOS  ################
 ##############################################
-NUM_PARTICLES = 100000 #Número de partículas
+NUM_PARTICLES = 2000000 #Número de partículas
 NUM_PARTICLES_BULGE = int(0.14 * NUM_PARTICLES) #el 14% de la materia ordinaria es del bulbo
 M_TOTAL = 3245*2.325*1e7 #masa total de las particulas q van a interactuar
 M_PARTICLE = M_TOTAL / NUM_PARTICLES #masa de las particulas en Msolares
@@ -44,7 +44,7 @@ def pot_dark(r_vec, lim):
     
 lim = 100 #tamaño de la caja en kpc
 
-NP = 150 #número de celdas
+NP = 100 #número de celdas
 NC = int(NP/2)
 
 H = lim / NP #lado de una celda

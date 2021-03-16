@@ -216,7 +216,7 @@ for k in range(n_graf):
     sigma_data = np.array(sigma_data)
     
   
-    corte = np.argmax(v_tan_data[:])
+    corte = 10
     param, cov = curve_fit(c, r_data[corte:-1], v_tan_data[corte:-1], guess, sigma = None, absolute_sigma = True)    
     c_fit = c(r_data[corte:-1], param[0], param[1]) #curve fit 
     R2 = r2_score(c_fit, v_tan_data[corte:-1])

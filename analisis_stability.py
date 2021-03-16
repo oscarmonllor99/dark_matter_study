@@ -174,7 +174,7 @@ c_fit_t = c(t, param_t[0], param_t[1])
 param_Q, cov_Q = curve_fit(c, t, Q_list, guess, sigma = None, absolute_sigma = True)    
 c_fit_Q = c(t, param_Q[0], param_Q[1],) 
 
-fig, axs = plt.subplots(1, 2, figsize = (8, 5))
+fig, axs = plt.subplots(1, 2, figsize = (9, 5))
 axs[0].scatter(t, t_list, c = 'red', s = 5, marker = '*', label = "$t$")
 #axs[0].plot(t, c_fit_t, c = 'black')
 axs[0].set_xlabel('Tiempo (My)')

@@ -124,8 +124,8 @@ for k in range(n_graf):
     #creamos la figura
     fig, (ax1, ax2) = plt.subplots(1, 2)
     fig.tight_layout()
-    ax1.set_xlabel('Above')
-    ax2.set_xlabel('Side')
+    ax1.set_xlabel('XY')
+    ax2.set_xlabel('YZ')
                    
     im1 = ax1.imshow(rho[k,:,:], cmap = 'nipy_spectral', norm=colors.PowerNorm(gamma=0.5), interpolation = 'gaussian')
     scatter_CM1 = ax1.scatter(R_CM[k_graf,0], R_CM[k_graf,1], c = 'white', s=1000000, 

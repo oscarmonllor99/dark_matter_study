@@ -50,7 +50,7 @@ n = int(ntot / div_r) #numero de pasos de tiempo guardados para r
 
 dt = sim_parameters[5]
 
-r = 0.01 #en kpc
+r = 0.005 #en kpc
 
 tray = np.loadtxt('trayectorias.dat', dtype = float)
 tray_3D = tray.reshape(n, N, 3)
@@ -59,24 +59,24 @@ tray_3D = tray.reshape(n, N, 3)
 
 
 #creamos la figura
-fig, (ax1, ax2) = plt.subplots(nrows = 1, ncols = 2, figsize = (8, 5))
+fig, (ax1) = plt.subplots(nrows = 1, ncols = 1, figsize = (6, 5))
 #fig.tight_layout()
 ax1.set_xlabel('XY')
-ax2.set_xlabel('YZ')
+#ax2.set_xlabel('YZ')
 
 ax1.set_xlim([-x_lim/2, x_lim/2])
     
 ax1.set_ylim([-y_lim/2, y_lim/2])
     
-ax2.set_xlim([-y_lim/2, y_lim/2])
+#ax2.set_xlim([-y_lim/2, y_lim/2])
     
-ax2.set_ylim([-z_lim/2, z_lim/2])
+#ax2.set_ylim([-z_lim/2, z_lim/2])
 
 ax1.set_facecolor('white')
-ax2.set_facecolor('white')
+#ax2.set_facecolor('white')
 
 ax1.set_axis_off()
-ax2.set_axis_off()
+#ax2.set_axis_off()
 
 #dibujamos las esferas que representan a cada partícula
     
@@ -89,7 +89,7 @@ Z = np.copy(X)
 X[:], Y[:], Z[:] = tray_3D[0, :, 0], tray_3D[0, :, 1], tray_3D[0, :, 2],
 
 plot_XY, = ax1.plot(X, Y, marker = 'd', c = 'black', markersize = 10*r, linestyle='None')
-plot_YZ, = ax2.plot(Y, Z, marker = 'd', c = 'black', markersize = 10*r, linestyle='None')
+#plot_YZ, = ax2.plot(Y, Z, marker = 'd', c = 'black', markersize = 10*r, linestyle='None')
 plt.grid()
 txt = fig.suptitle('')
        
@@ -104,7 +104,7 @@ def animation_frame(k):
         Z = tray_3D[k, :, 2] - z_lim/2
 
         plot_XY.set_data(X, Y)
-        plot_YZ.set_data(Y, Z)
+        #plot_YZ.set_data(Y, Z)
 
         return txt
             
