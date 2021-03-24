@@ -48,7 +48,7 @@ n_graf = 6
 
 dt = sim_parameters[5]
 
-Np = int(lim)
+Np = 2*int(lim)
 
 h = lim/Np
 
@@ -79,28 +79,11 @@ def densidad(r_list_0):
 
     return rho
 
-@jit(nopython=True, fastmath = True)
-def densidad_z(r_list_0):
-    rho = np.ones((Np + 1, Np+ 1))
-    for i in range(Nd, N):
-        y_pos = int(r_list_0[i,1] / h)
-        z_pos = int(r_list_0[i,2] / h)
-        
-        if y_pos <= 0 or y_pos >= Np or z_pos <= 0 or z_pos >= Np:
-            
-            pass
-        
-        else:
-            rho[z_pos+1, y_pos+1] += m / h**2
-    return rho
 
-
-x = np.arange(0, lim + h, h)
-y = np.arange(0, lim + h, h)
-z = np.arange(0, lim + h, h)
+x = np.linspace(-lim/2, lim/2, Np+1)
+y = np.linspace(-lim/2, lim/2, Np+1)
 
 X, Y = np.meshgrid(x,y)
-Y_z, Z_z = np.meshgrid(y, z)
 
 @jit(nopython=True, fastmath = True)
 def iterator_rho(rho):
@@ -109,34 +92,26 @@ def iterator_rho(rho):
         rho[k, :, :] = densidad(tray_3D[k_graf, :, :])
     return rho
 
-@jit(nopython=True, fastmath = True)
-def iterator_rho_z(rho_z):
-    for k in range(n_graf):
-        k_graf = int(n/n_graf)*k
-        rho_z[k, :, :] = densidad_z(tray_3D[k_graf, :, :])
-    return rho_z
-
 rho = iterator_rho(np.empty((n_graf, Np+1, Np+1)))
-rho_z = iterator_rho_z(np.empty((n_graf, Np+1, Np+1)))
+
 
 for k in range(n_graf):
     k_graf = int(n/n_graf)*k
     #creamos la figura
-    fig, (ax1, ax2) = plt.subplots(1, 2)
-    fig.tight_layout()
-    ax1.set_xlabel('XY')
-    ax2.set_xlabel('YZ')
-                   
-    im1 = ax1.imshow(rho[k,:,:], cmap = 'nipy_spectral', norm=colors.PowerNorm(gamma=0.5), interpolation = 'gaussian')
-    scatter_CM1 = ax1.scatter(R_CM[k_graf,0], R_CM[k_graf,1], c = 'white', s=1000000, 
+    fig, ax1 = plt.subplots(1, 1, figsize = (5,4), dpi=400)
+    ax1.set_xlabel('Plano galáctico')
+
+    im1 = ax1.contourf(X[int(Np/4):int(3*Np/4), int(Np/4):int(3*Np/4)], 
+                       Y[int(Np/4):int(3*Np/4), int(Np/4):int(3*Np/4)], 
+                       rho[k,int(Np/4):int(3*Np/4), int(Np/4):int(3*Np/4)], cmap='inferno', 
+                      levels = 999, norm=colors.PowerNorm(gamma=0.3)) 
+    scatter_CM1 = ax1.scatter(R_CM[k_graf,0] -lim/2, R_CM[k_graf,1]-lim/2, c = 'white', s=1000000, 
                               marker = '+', linewidths=1, alpha = 0.2)
-    im2 = ax2.imshow(rho_z[k,:,:], cmap = 'nipy_spectral', norm=colors.PowerNorm(gamma=0.5), interpolation = 'gaussian')
-    scatter_CM2 = ax2.scatter(R_CM[k_graf,1], R_CM[k_graf,2], c = 'white', s=1000000, 
-                              marker = '+', linewidths=1, alpha = 0.2)
+
     txt = fig.suptitle('{} millones de años'.format(int((k_graf*div_r*dt))))
-    colorbar = fig.colorbar(im1, fraction = 0.15)
-    colorbar.ax.set_xlabel('$M_0$')
-    
+    colorbar = fig.colorbar(im1, fraction = 0.1)
+    colorbar.ax.set_xlabel('$M_0 · kpc^{-3}$', loc = 'left')
+    plt.tight_layout()
     plt.savefig('Gráfico de densidad para {} millones de años'.format(int((k_graf*div_r*dt))))
     
 

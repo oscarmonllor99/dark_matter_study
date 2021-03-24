@@ -65,7 +65,7 @@ def Q_calculator(eners_pot, vels, m, N, n_v, rho):
                 R_centro[1] = tray_3D[k, i, 1] - R_CM[k, 1]
                 R_centro[2] = 0
                 R_norm = np.linalg.norm(R_centro)
-                if 8 <= R_norm <= 9:
+                if 4 <= R_norm <= 5:
                     ur = R_centro / R_norm
                     vr = abs(np.dot(vels_3D[k, i], ur))
                     vz = vels_3D[k, i, 2]
@@ -77,7 +77,7 @@ def Q_calculator(eners_pot, vels, m, N, n_v, rho):
         N_rho = 0
         for x in range(Np):
             for y in range(Np):
-                if 8 <= np.sqrt((x - Np/2)**2 + (y - Np/2)**2) <= 9:
+                if 4 <= np.sqrt((x - Np/2)**2 + (y - Np/2)**2) <= 5:
                     if rho[k, Np, Np] > 0:
                         rho_sum += rho[k, x, y]
                         N_rho += 1
@@ -86,10 +86,11 @@ def Q_calculator(eners_pot, vels, m, N, n_v, rho):
         v_list_c = np.array(v_list_c)
         
         sigma_r = dispersion(v_list_r)
+        sigma_phi = dispersion(v_list_c)
         rho_mean = rho_sum/N_rho
         vc_mean = np.mean(v_list_c)
-        w_e = np.sqrt(2)*vc_mean/8.5
-        sigma_min = 3.36*G*rho_mean/w_e
+        kappa = (2*vc_mean*sigma_phi/sigma_r)*(1/4.5)
+        sigma_min = 3.36*G*rho_mean/kappa
         
         if sigma_r/sigma_min < 100:
             Q_list[k] = sigma_r/sigma_min
@@ -127,7 +128,7 @@ def t_calculator(eners_pot, vels, m, N, n_v):
                 
             v_ang = -vx*np.sin(theta_g) + vy*np.cos(theta_g)
             
-            ener_cin += 0.5*m*v_ang**2
+            ener_cin += 0.5*m*v_ang**2 
             ener_pot += 0.5*eners_pot[k, i]
 
         t_list[k] = abs(ener_cin/ener_pot)

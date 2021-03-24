@@ -11,8 +11,6 @@ from numba import njit
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from sklearn.metrics import r2_score
-from sklearn.neighbors import KDTree
-from matplotlib.animation import FuncAnimation
 
 sim_parameters = np.loadtxt('parameters.dat')
 
@@ -58,8 +56,8 @@ def maxwell(v, sigma, a):
 #def cauchi
 
 points_v = v_distribution(f_v, vels_abs)
-param1, cov1 = curve_fit(gauss, Vs, points_v/N, guess1, sigma = None, absolute_sigma = True)
-param2, cov2 = curve_fit(maxwell, Vs, points_v/N, guess2, sigma = None, absolute_sigma = True)
+param1, cov1 = curve_fit(gauss, Vs[:], points_v[:]/N, guess1, sigma = None, absolute_sigma = True)
+param2, cov2 = curve_fit(maxwell, Vs[:], points_v[:]/N, guess2, sigma = None, absolute_sigma = True)
 fit1 = gauss(Vs, param1[0], param1[1], param1[2])
 fit2 = maxwell(Vs, param2[0], param2[1])
 R21 = r2_score(fit1, points_v/N)
@@ -78,6 +76,7 @@ fit_v_info[1,2] = R22
 np.savetxt('fit_v_info.txt', fit_v_info, fmt = '%.2e')
 
 plt.figure()
+plt.ylim(0, 1.2*np.max(100*points_v/N))
 plt.plot(Vs/(1.022*1e-3), 100*points_v/N , c='black', marker='*', label = 'Datos')
 plt.plot(Vs/(1.022*1e-3), 100*fit1, c='blue', label = 'Gaussiana')
 plt.plot(Vs/(1.022*1e-3), 100*fit2, c='red', label='Maxwelliana')

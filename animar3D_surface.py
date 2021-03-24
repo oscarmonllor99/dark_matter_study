@@ -49,7 +49,7 @@ n = int(ntot / div_r) #numero de pasos de tiempo guardados para r
 
 dt = sim_parameters[5]
 
-Np = int(lim)
+Np = 2*int(lim)
 
 h = lim/Np
 
@@ -60,17 +60,16 @@ tray_CM = np.loadtxt('trayectoria_CM.dat', dtype = float)
 R_CM = tray_CM.reshape(n,3)
 
 #creamos la figura
-fig, (ax1, ax2) = plt.subplots(1, 2)
-fig.tight_layout()
+fig, ax1 = plt.subplots(1, 1, figsize = (7,6))
+#fig.tight_layout()
 ax1.set_xlabel('XY')
-ax2.set_xlabel('YZ')
 
 
 #posiciones iniciales de las partículas
 #tray[paso de tiempo, particula, eje]
 @jit(nopython=True, fastmath = True)
 def densidad(r_list_0):
-    rho = np.ones((Np + 1, Np + 1))
+    rho = np.ones((Np, Np))
     for i in range(Nd, N):
         x_pos = int(r_list_0[i,0] / h)
         y_pos = int(r_list_0[i,1] / h)
@@ -85,28 +84,12 @@ def densidad(r_list_0):
 
     return rho
 
-@jit(nopython=True, fastmath = True)
-def densidad_z(r_list_0):
-    rho = np.ones((Np + 1, Np+ 1))
-    for i in range(Nd, N):
-        y_pos = int(r_list_0[i,1] / h)
-        z_pos = int(r_list_0[i,2] / h)
-        
-        if y_pos <= 0 or y_pos >= Np or z_pos <= 0 or z_pos >= Np:
-            
-            pass
-        
-        else:
-            rho[z_pos+1, y_pos+1] += m / h**2
-    return rho
 
 
-x = np.arange(0, lim + h, h)
-y = np.arange(0, lim + h, h)
-z = np.arange(0, lim + h, h)
+x = np.linspace(-lim/2, lim/2, Np+1)
+y = np.linspace(-lim/2, lim/2, Np+1)
 
 X, Y = np.meshgrid(x,y)
-Y_z, Z_z = np.meshgrid(y, z)
 
 @jit(nopython=True, fastmath = True)
 def iterator_rho(rho):
@@ -114,33 +97,32 @@ def iterator_rho(rho):
         rho[k, :, :] = densidad(tray_3D[k, :, :])
     return rho
 
-@jit(nopython=True, fastmath = True)
-def iterator_rho_z(rho_z):
-    for k in range(n):
-        rho_z[k, :, :] = densidad_z(tray_3D[k, :, :])
-    return rho_z
 
-rho = iterator_rho(np.empty((n, Np+1, Np+1)))
-rho_z = iterator_rho_z(np.empty((n, Np+1, Np+1)))
+rho = iterator_rho(np.empty((n, Np, Np)))
 
 
-im1 = ax1.imshow(rho[0,:,:], cmap = 'nipy_spectral', norm=colors.PowerNorm(gamma=0.3), interpolation = 'gaussian')
-scatter_CM1 = ax1.scatter(R_CM[0,0], R_CM[0,1], c = 'white', s=1000000, 
+
+im1 = ax1.contourf(X[int(Np/4):int(3*Np/4), int(Np/4):int(3*Np/4)], 
+                       Y[int(Np/4):int(3*Np/4), int(Np/4):int(3*Np/4)], 
+                       rho[0,int(Np/4):int(3*Np/4), int(Np/4):int(3*Np/4)], cmap='inferno', 
+                      levels = 999, norm=colors.PowerNorm(gamma=0.3)) 
+scatter_CM1 = ax1.scatter(R_CM[0,0]-lim/2, R_CM[0,1]-lim/2, c = 'white', s=1000000, 
                           marker = '+', linewidths=1, alpha = 0.5)
-im2 = ax2.imshow(rho_z[0,:,:], cmap = 'nipy_spectral', norm=colors.PowerNorm(gamma=0.3), interpolation = 'gaussian')
-scatter_CM2 = ax2.scatter(R_CM[0,1], R_CM[0,2], c = 'white', s=1000000, 
-                          marker = '+', linewidths=1, alpha = 0.5)
+
+
 txt = fig.suptitle('{:d} millones de años'.format(int(0*div_r*dt)))
 colorbar = fig.colorbar(im1, fraction = 0.15)
 colorbar.ax.set_xlabel('$M_0 · kpc^{-3}$')
 
 def animation_frame(k):
+    ax1.clear()
     txt.set_text('{:d} millones de años'.format(int(k*div_r*dt)))
-    scatter_CM1.set_offsets([R_CM[k,0], R_CM[k,1]])
-    im1.set_array(rho[k,:,:])
-    scatter_CM2.set_offsets([R_CM[k,1], R_CM[k,2]])
-    im2.set_array(rho_z[k,:,:])
-    
+    scatter_CM1.set_offsets([R_CM[k,0]-lim/2, R_CM[k,1]]-lim/2)
+    ax1.contourf(X[int(Np/4):int(3*Np/4), int(Np/4):int(3*Np/4)], 
+                       Y[int(Np/4):int(3*Np/4), int(Np/4):int(3*Np/4)], 
+                       rho[k,int(Np/4):int(3*Np/4), int(Np/4):int(3*Np/4)], cmap='inferno', 
+                      levels = 900, norm=colors.PowerNorm(gamma=0.3)) 
+
     return txt
             
     

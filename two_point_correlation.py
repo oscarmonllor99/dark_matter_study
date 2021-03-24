@@ -44,11 +44,11 @@ def partir_tray(tray):
 
 tray_reduced = partir_tray(tray_3D)
 
-r = np.linspace(0, lim/2, 50)
+r = np.linspace(0, 20, 200)
 
 
 r_list_0 = tray_reduced[0]
-tree = KDTree(r_list_0, leaf_size=int(0.1*N))
+tree = KDTree(r_list_0, leaf_size=int(0.01*N))
 correlacion = tree.two_point_correlation(r_list_0, r, dualtree = True)
 correl_norm = correlacion/np.max(correlacion)
 

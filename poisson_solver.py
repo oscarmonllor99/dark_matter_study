@@ -10,11 +10,11 @@ import matplotlib.pyplot as plt
 import random 
 import time
 from matplotlib import colors
-from scipy.optimize import curve_fit
+
 ##############################################
 ######### PARÁMETROS FÍSICOS  ################
 ##############################################
-NUM_PARTICLES = 2000000 #Número de partículas
+NUM_PARTICLES = 1000000 #Número de partículas
 NUM_PARTICLES_BULGE = int(0.14 * NUM_PARTICLES) #el 14% de la materia ordinaria es del bulbo
 M_TOTAL = 3245*2.325*1e7 #masa total de las particulas q van a interactuar
 M_PARTICLE = M_TOTAL / NUM_PARTICLES #masa de las particulas en Msolares
@@ -143,13 +143,12 @@ for i in range(NUM_PARTICLES):
                 r_list_0[i, 2] = lim/2 + z
 
 @jit(nopython=True, fastmath = True, parallel = False)
-def sign(x):
-    if x >= 0.:
-        return 1
-    if x < 0.:
-        return -1
-    return
-
+def W(d, h):
+    if d <= h:
+        return 1 - d/h
+    else:
+        return 0
+    
 """
 @jit(nopython=True, fastmath = True, parallel = False)
 def W(d, h):
@@ -159,15 +158,7 @@ def W(d, h):
         return 0.5*(3/2 - d/h)**2
     else:
         return 0
-    
 """
-
-@jit(nopython=True, fastmath = True, parallel = False)
-def W(d, h):
-    if d <= h:
-        return 1-d/h
-    else:
-        return 0
 
 @jit(nopython=True, fastmath = True, parallel = False)
 def densidad(r_list, Np, h):
@@ -201,12 +192,12 @@ t0 = time.time()
 RHO0 = densidad(r_list_0, NP, H)
 
 plt.figure()
-cmap = plt.cm.get_cmap("gray")
+cmap = plt.cm.get_cmap("magma")
 plt.imshow(RHO0[:,:,int(NP/2)] + 0.01, norm=colors.LogNorm(), cmap = cmap)
 plt.show()
 
 plt.figure()
-cmap = plt.cm.get_cmap("gray")
+cmap = plt.cm.get_cmap("magma")
 plt.imshow(np.transpose(RHO0[int(NP/2),:,:]) + 0.01, norm=colors.LogNorm(), cmap = cmap)
 plt.show()
 
@@ -222,7 +213,7 @@ PHI0[NP-1, :, :] = -G*M_TOTAL/(R0[NP-1, :, :])
 @jit(nopython=True, fastmath = True)
 def poisson(rho, phi, Np, h):
     w = 0.95
-    tol = 1e-5
+    tol = 1e-4
     acabar = False
     iterations = 0
     while not acabar:
@@ -251,7 +242,7 @@ tf = time.time()
 print(tf-t0)
 
 fig, ax = plt.subplots()
-cmap = plt.cm.get_cmap("gray")
+cmap = plt.cm.get_cmap("magma")
 cs = ax.contourf(phi[:,:, int(NP/2)], cmap = cmap, levels = 70) #pasamos el potencial a km**2 / s**2
 colorbar = fig.colorbar(cs)
 colorbar.ax.set_xlabel('$\phi (kpc^2/My^2)$')

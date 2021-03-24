@@ -12,8 +12,8 @@ import argparse
 ##############################################
 ######### PARÁMETROS FÍSICOS  ################
 ##############################################
-Q = 1.5
-NUM_PARTICLES = 4000 #Número de partículas
+Q = 1
+NUM_PARTICLES = 100000 #Número de partículas
 NUM_PARTICLES_BULGE = int(0.14 * NUM_PARTICLES) #el 14% de la materia ordinaria es del bulbo
 M_TOTAL = 3245*2.325*1e7 #masa total de las particulas q van a interactuar
 M_PARTICLE = M_TOTAL / NUM_PARTICLES #masa de las particulas en Msolares
@@ -301,7 +301,7 @@ def cond_inicial(lim, k_vel, eps, dark):
         z0  = 0.26
         return  np.pi*G*sigma(R)*z0
     
-    def v_phi(R):
+    def v2_phi(R):
         hs = 2.43
         return  v_circular(R)**2 + sigma2_R(R) * (1 - (k_ep(R)/(2*omega(R)))**2 - 2*R/hs)
     
@@ -356,7 +356,7 @@ def cond_inicial(lim, k_vel, eps, dark):
             else:
                 
                 if dark:
-                    v_phi_med = np.sqrt(v_phi(R_norm))
+                    v_phi_med = np.sqrt(v2_phi(R_norm))
                     
                 else:
                     v_phi_med = v_circular(R_norm)
@@ -520,31 +520,31 @@ if __name__ == "__main__":
     parser.add_argument(
         "--lim",
         type=float,
-        default=50.0,
+        default=100.0,
         help="en kpc.",
     )
     parser.add_argument(
         "--time_step",
         type=int,
-        default=5000,
+        default=2000,
         help="timesteps.",
     )
     parser.add_argument(
         "--div_r",
         type=int,
-        default=10,
+        default=25,
         help="divr.",
     )
     parser.add_argument(
         "--div_v",
         type=int,
-        default=10,
+        default=25,
         help="divv.",
     )
     parser.add_argument(
         "--dmin",
         type=float,
-        default=0.5,
+        default=1,
         help="dmin.",
     )
     parser.add_argument(
@@ -556,7 +556,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dark",
         type=bool,
-        default=True,
+        default=False,
         help="dark_matter.",
     )
    

@@ -10,8 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import matplotlib.animation as animation
-import mpl_toolkits.mplot3d.axes3d as p3
-import matplotlib
+
 
 ###########################################
 ##########################################
@@ -116,6 +115,6 @@ movimiento = FuncAnimation(fig, func=animation_frame, frames=np.arange(1, n, sal
 if save:
         # Set up formatting for the movie files
         Writer = animation.writers['ffmpeg']
-        writer = Writer(fps=2, metadata=dict(artist='Me'), bitrate=1800)
+        writer = Writer(fps=10, metadata=dict(artist='Me'), bitrate=1800)
         movimiento.save('movimiento.mp4', writer=writer)
 

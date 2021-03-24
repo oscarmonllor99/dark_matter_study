@@ -267,7 +267,7 @@ def cond_inicial(lim, k_vel, eps):
         z0  = 0.26
         return  np.pi*G*sigma(R)*z0
     
-    def v_phi(R):
+    def v2_phi(R):
         hs = 2.43
         return  v_circular(R)**2 + sigma2_R(R) * (1 - (k_ep(R)/(2*omega(R)))**2 - 2*R/hs)
     
@@ -315,7 +315,7 @@ def cond_inicial(lim, k_vel, eps):
             else:
                 
                 sigma_R = np.sqrt(sigma2_R(R_norm))
-                v_phi_med = np.sqrt(v_phi(R_norm))
+                v_phi_med = np.sqrt(v2_phi(R_norm))
                 sigma_phi = np.sqrt(sigma2_phi(R_norm))
                 sigma_z = np.sqrt(sigma2_z(R_norm))
                 

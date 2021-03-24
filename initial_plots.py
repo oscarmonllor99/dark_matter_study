@@ -8,14 +8,11 @@ Created on Sun Mar 14 14:57:22 2021
 from numba import jit
 import numpy as np
 import matplotlib.pyplot as plt
-import random 
-import time
-from matplotlib import colors
-from scipy.optimize import curve_fit
+
 
 G = 4.518 * 1e-12 #constante de gravitación universal en Kpc, Msolares y Millones de años
 dark = False
-Q = 1.5
+Q = 1
 
 
 @jit(nopython=True, fastmath = True, parallel = False)

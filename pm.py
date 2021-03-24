@@ -7,8 +7,8 @@ import argparse
 ##############################################
 ######### PARÁMETROS FÍSICOS  ################
 ##############################################
-Q = 1.5
-NUM_PARTICLES = 2000000 #Número de partículas
+Q = 1.3
+NUM_PARTICLES = 100000 #Número de partículas
 NUM_PARTICLES_BULGE = int(0.14 * NUM_PARTICLES) #el 14% de la materia ordinaria es del bulbo
 M_TOTAL = 3245*2.325*1e7 #masa total de las particulas q van a interactuar
 M_PARTICLE = M_TOTAL / NUM_PARTICLES #masa de las particulas en Msolares
@@ -21,7 +21,14 @@ T_SOL = 225 #periodo del Sol alrededor de la galaxia en Millones de años
 ##############################################
 ### FUNCIONES A UTILIZAR ###
 ##############################################
-
+"""
+@jit(nopython=True, fastmath = True, parallel = False)
+def W(d, h):
+    if d <= h:
+        return 1 - d/h
+    else:
+        return 0
+"""
 @jit(nopython=True, fastmath = True, parallel = False)
 def W(d, h):
     if d <= h/2:
@@ -30,7 +37,8 @@ def W(d, h):
         return 0.5*(3/2 - d/h)**2
     else:
         return 0
-    
+
+
 @jit(nopython=True, fastmath = True, parallel = False)
 def factor_r(r):
     ah = 7.7
@@ -127,6 +135,7 @@ def fuerza(r_list, g, i, dark, Np, h, lim):
                         dz = abs((z_pos + z + 0.5)*h - r_list[i,2])
                         fuerza_i += ( g[:, x_pos + x, y_pos + y, z_pos + z] 
                                       * W(dx, h) * W(dy, h) * W(dz, h) )
+        #r_vec = r_list_i - lim/2
         
         if dark:
             return fuerza_i + f_dark(r_list_i, lim)
@@ -165,7 +174,7 @@ def densidad(r_list, Np, h):
 @jit(nopython=True, fastmath = True)
 def poisson(rho, phi, Np, h):
     w = 0.95
-    tol = 1e-5
+    tol = 1e-4
     acabar = False
     while not acabar:
         max_diff = 0
@@ -332,11 +341,13 @@ def cond_inicial(lim, k_vel, eps, dark, Np, h, phi0):
     phi_data = np.zeros(len(Rs))
     for i in range(len(phi_data)):
                 r_vec = np.array([HR*(i+0.5) + lim/2, lim/2, lim/2])
+
                 if dark:
                     phi_data[i] += pot_dark(r_vec, lim) + pot_bulge(r_vec, lim) + pot_disk(r_vec, lim)
                 else:
                     phi_data[i] += pot_bulge(r_vec, lim) + pot_disk(r_vec, lim)
-    
+
+                
     phi1_data = np.gradient(phi_data, HR)
     phi2_data = np.gradient(phi1_data, HR)
     
@@ -379,7 +390,7 @@ def cond_inicial(lim, k_vel, eps, dark, Np, h, phi0):
         z0  = 0.26
         return  np.pi*G*sigma(R)*z0
     
-    def v_phi(R):
+    def v2_phi(R):
         hs = 2.43
         return  v_circular(R)**2 + sigma2_R(R) * (1 - (k_ep(R)/(2*omega(R)))**2 - 2*R/hs)
     
@@ -390,7 +401,7 @@ def cond_inicial(lim, k_vel, eps, dark, Np, h, phi0):
         x_pos =  int(r_list_0[i,0] // h)
         y_pos =  int(r_list_0[i,1] // h)
         z_pos =  int(r_list_0[i,2] // h)
-        
+
         if dark:
             phii = ( pot_dark(r_list_0[i,:], lim) + pot_bulge(r_list_0[i,:], lim) 
                     + pot_disk(r_list_0[i,:], lim) )
@@ -398,7 +409,10 @@ def cond_inicial(lim, k_vel, eps, dark, Np, h, phi0):
         else:
             phii = pot_bulge(r_list_0[i,:], lim) + pot_disk(r_list_0[i,:], lim)
             E_pot += M_PARTICLE*phii
-            
+
+
+        E_pot += M_PARTICLE*phii
+        
         v_esc = np.sqrt(-2 * phii)
         
         R_norm = r_esf_tot[i,0]
@@ -419,12 +433,9 @@ def cond_inicial(lim, k_vel, eps, dark, Np, h, phi0):
                 v_list_0[i, 2] = k_vel * v_z
                 
         else:
-                if dark:
-                    v_phi_med = np.sqrt(v_phi(R_norm))
-                    
-                else:
-                    v_phi_med = v_circular(R_norm)
-                    
+
+                v_phi_med = np.sqrt(v2_phi(R_norm))
+
                 sigma_R = np.sqrt(sigma2_R(R_norm))
                 sigma_phi = np.sqrt(sigma2_phi(R_norm))
                 sigma_z = np.sqrt(sigma2_z(R_norm))
@@ -620,19 +631,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "--time_step",
         type=int,
-        default=2000,
+        default=1000,
         help="timesteps.",
     )
     parser.add_argument(
         "--div_r",
         type=int,
-        default=100,
+        default=50,
         help="divr.",
     )
     parser.add_argument(
         "--div_v",
         type=int,
-        default=100,
+        default=50,
         help="divv.",
     )
     parser.add_argument(
