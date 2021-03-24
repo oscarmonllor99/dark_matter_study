@@ -1,5 +1,5 @@
 # dark_matter_study
-An study of the effects of dark matter on galactic dynamics: rotational curves, velocity distribution functions, galactic morphologies, two-point correlation function, etc. The alternative to the dark matter hypothesis, MOND, is also considered and implemented. 
+An study of the effects of dark matter on galactic dynamics with Python: rotational curves, velocity distribution functions, galactic morphologies, two-point correlation function, etc. The alternative to the dark matter hypothesis, MOND, is also considered and implemented. 
 
 pp, pp_mond, pm --> Codes that solve the N-Body problem. "pp" is the "particle-particle" or "direct summation" method. On the other hand "pm" is the "particle-mesh" method.
 
